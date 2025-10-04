@@ -12,7 +12,7 @@ const GlobePage: React.FC = () => {
           🌍 NASA Space Visualization
         </h1>
         
-        <p style={{ textAlign: 'center', marginBottom: '30px', color: '#666', fontSize: '1.1rem' }}>
+       <p className="text-center mb-8 text-gray-600 text-xl max-w-2xl mx-auto leading-relaxed">
           Explore NASA facilities and space missions around the globe using CesiumJS
         </p>
         
