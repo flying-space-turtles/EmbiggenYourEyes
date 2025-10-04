@@ -1,15 +1,5 @@
 import { useState, useEffect } from "react";
-
-interface FlyToCoords {
-  lat: number;
-  lon: number;
-  boundingbox: {
-    south: number;
-    north: number;
-    west: number;
-    east: number;
-  };
-}
+import { type FlyToCoords } from "../types/FlyToCoords";
 
 interface SearchResult extends FlyToCoords {
   name: string;

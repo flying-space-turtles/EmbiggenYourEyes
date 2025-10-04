@@ -1,18 +1,14 @@
 import { useEffect } from 'react';
 import { Cartesian3, Viewer, Rectangle} from 'cesium';
 
+import { type FlyToCoords } from "../types/FlyToCoords";
+
 interface UseFlyToCoordsProps {
   viewer: React.MutableRefObject<Viewer | null>;
-  flyToCoords?: { lat: number; lon: number; boundingbox: {
-    south: number;
-    north: number;
-    west: number;
-    east: number;
-  };} | null;
+  flyToCoords?: FlyToCoords | null;
   altitude?: number;
   duration?: number;
 }
-
 
 export const useFlyToCoords = ({ 
   viewer, 

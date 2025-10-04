@@ -2,13 +2,10 @@ import React, { useState } from 'react';
 import Globe from '../components/Globe';
 import SearchBox from "../components/SearchBox";
 
+import { type FlyToCoords } from "../types/FlyToCoords"; // import the shared type
+
 const GlobePage: React.FC = () => {
-  const [coords, setCoords] = useState<{ lat: number; lon: number; boundingbox: {
-    south: number;
-    north: number;
-    west: number;
-    east: number;
-  };} | null>(null);
+  const [coords, setCoords] = useState<FlyToCoords | null>(null);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
@@ -21,11 +18,17 @@ const GlobePage: React.FC = () => {
       
       {/* Search box overlay */}
       <div className="absolute right-20 top-4 z-20">
-        <SearchBox onResult={(data) => setCoords({ lat: data.lat, lon: data.lon, boundingbox: data.boundingbox })} />
+        <SearchBox 
+          onResult={(data: FlyToCoords) => setCoords(data)} 
+        />
       </div>
 
       {/* Fullscreen Globe */}
-      <Globe height="100vh" width="100vw" flyToCoords={coords} />
+      <Globe 
+        height="100vh" 
+        width="100vw" 
+        flyToCoords={coords} 
+      />
     </div>
   );
 };

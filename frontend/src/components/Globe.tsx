@@ -6,15 +6,13 @@ import { useCesiumViewer } from '../hooks/useCesiumViewer';
 import { useScreenshot } from '../hooks/useScreenshot';
 import { useFlyToCoords } from '../hooks/useFlyToCoords';
 
+import { type FlyToCoords } from "../types/FlyToCoords";
+
+
 interface GlobeProps {
   width?: string;
   height?: string;
-  flyToCoords?: { lat: number; lon: number; boundingbox: {
-    south: number;
-    north: number;
-    west: number;
-    east: number;
-  }; } | null;
+  flyToCoords?: FlyToCoords | null; 
 }
 
 const Globe: React.FC<GlobeProps> = ({
