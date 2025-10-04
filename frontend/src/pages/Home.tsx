@@ -65,70 +65,95 @@ function Home() {
   }
 
   return (
-    <div style={{ padding: '40px', textAlign: 'center' }}>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React + Django</h1>
-      
-      <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h3>API Status</h3>
-          <p style={{ color: apiStatus.includes('failed') ? 'red' : 'green' }}>
-            {apiStatus}
+    <div className="min-h-screen bg-gray-100 p-10 text-center">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-8 flex justify-center gap-8">
+          <a href="https://vite.dev" target="_blank" rel="noopener noreferrer">
+            <img 
+              src={viteLogo} 
+              className="h-24 p-6 transition-all duration-300 will-change-auto hover:drop-shadow-[0_0_2em_#646cffaa]" 
+              alt="Vite logo" 
+            />
+          </a>
+          <a href="https://react.dev" target="_blank" rel="noopener noreferrer">
+            <img 
+              src={reactLogo} 
+              className="h-24 animate-spin p-6 transition-all duration-300 will-change-auto hover:drop-shadow-[0_0_2em_#61dafbaa]" 
+              alt="React logo" 
+              style={{ animationDuration: '20s' }}
+            />
+          </a>
+        </div>
+
+        <h1 className="mb-8 text-4xl font-bold text-gray-900">
+          Vite + React + Django
+        </h1>
+        
+        <div className="mb-8 rounded-lg bg-white p-6 shadow-lg">
+          <div className="mb-6">
+            <h3 className="mb-2 text-xl font-semibold text-gray-800">API Status</h3>
+            <p className={`font-medium ${apiStatus.includes('failed') ? 'text-red-600' : 'text-green-600'}`}>
+              {apiStatus}
+            </p>
+          </div>
+
+          <div className="mb-6">
+            <button 
+              onClick={() => setCount((count) => count + 1)}
+              className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              count is {count}
+            </button>
+          </div>
+
+          <div className="mb-6">
+            <h3 className="mb-4 text-xl font-semibold text-gray-800">Messages</h3>
+            <div className="mb-4 flex gap-2">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Enter a message"
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <button 
+                onClick={createMessage}
+                className="rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                Add Message
+              </button>
+            </div>
+            
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200">
+              {messages.length === 0 ? (
+                <p className="p-4 text-gray-500">No messages yet. Add one above!</p>
+              ) : (
+                <div className="space-y-2 p-4">
+                  {messages.map((message) => (
+                    <div 
+                      key={message.id} 
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-left"
+                    >
+                      <p className="font-medium text-gray-800">{message.content}</p>
+                      <small className="text-gray-500">
+                        Created: {new Date(message.created_at).toLocaleString()}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <p className="text-gray-700">
+            Navigate to the <strong className="text-blue-600">Globe</strong> page to see the CesiumJS visualization!
           </p>
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <button onClick={() => setCount((count) => count + 1)}>
-            count is {count}
-          </button>
-        </div>
-
-        <div style={{ marginBottom: '20px' }}>
-          <h3>Messages</h3>
-          <div style={{ marginBottom: '10px' }}>
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Enter a message"
-              style={{ marginRight: '10px', padding: '5px' }}
-            />
-            <button onClick={createMessage}>Add Message</button>
-          </div>
-          
-          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-            {messages.length === 0 ? (
-              <p>No messages yet. Add one above!</p>
-            ) : (
-              messages.map((message) => (
-                <div key={message.id} style={{ 
-                  border: '1px solid #ccc', 
-                  margin: '5px 0', 
-                  padding: '10px',
-                  borderRadius: '5px'
-                }}>
-                  <p>{message.content}</p>
-                  <small>Created: {new Date(message.created_at).toLocaleString()}</small>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <p>
-          Navigate to the <strong>Globe</strong> page to see the CesiumJS visualization!
+        <p className="text-gray-600">
+          Click on the Vite and React logos to learn more
         </p>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
     </div>
   )
 }

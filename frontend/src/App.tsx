@@ -1,51 +1,24 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import Home from './pages/Home'
 import GlobePage from './pages/GlobePage'
-import './App.css'
 
 function App() {
   return (
     <Router>
-      <div style={{ minHeight: '100vh' }}>
-        <nav style={{
-          padding: '20px',
-          backgroundColor: '#1a1a1a',
-          borderBottom: '1px solid #333'
-        }}>
-          <div style={{ 
-            maxWidth: '1200px', 
-            margin: '0 auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '30px'
-          }}>
-            <h2 style={{ margin: 0, color: 'white' }}>🚀 EmbiggenYourEyes</h2>
-            <div style={{ display: 'flex', gap: '20px' }}>
+      <div className="min-h-screen bg-gray-900">
+        <nav className="border-b border-gray-700 bg-gray-800 p-5">
+          <div className="mx-auto flex max-w-6xl items-center gap-8">
+            <h2 className="m-0 text-xl font-bold text-white">🚀 EmbiggenYourEyes</h2>
+            <div className="flex gap-5">
               <Link 
                 to="/" 
-                style={{ 
-                  color: 'white', 
-                  textDecoration: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => (e.target as HTMLElement).style.backgroundColor = '#333'}
-                onMouseLeave={(e) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
+                className="rounded px-4 py-2 text-white no-underline transition-colors hover:bg-gray-700"
               >
                 Home
               </Link>
               <Link 
                 to="/globe" 
-                style={{ 
-                  color: 'white', 
-                  textDecoration: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => (e.target as HTMLElement).style.backgroundColor = '#333'}
-                onMouseLeave={(e) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
+                className="rounded px-4 py-2 text-white no-underline transition-colors hover:bg-gray-700"
               >
                 🌍 Globe
               </Link>
