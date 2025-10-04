@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
+import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme, Color } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
 import SearchBox from "./SearchBox";
@@ -20,6 +20,9 @@ type GibsLayer = {
   format: "jpg" | "png";
 };
 
+const OCEAN_KEY = Color.fromBytes(0, 70, 140, 255); // tweak to match your tiles
+const OCEAN_KEY_THRESHOLD = 0.25;
+
 // Mercator-only, time-enabled layers (no BlueMarble)
 const LAYERS: GibsLayer[] = [
   { id: "MODIS_Terra_CorrectedReflectance_TrueColor",  name: "MODIS Terra — True Color",          format: "jpg" },
@@ -33,8 +36,8 @@ const TILEMATRIX_SET = "GoogleMapsCompatible_Level9";
 const MAX_LEVEL_3857 = 9;
 
 // blend controls
-const BASE_ALPHA = 0.8; // default base map underneath
-const GIBS_ALPHA = 0.9;  // GIBS overlay on top
+const BASE_ALPHA = 0.9; // default base map underneath
+const GIBS_ALPHA = 0.8;  // GIBS overlay on top
 
 function buildGibsProvider3857(layerId: string, time: string, format: "jpg" | "png") {
   const tilingScheme = new WebMercatorTilingScheme();
@@ -159,6 +162,8 @@ const Globe: React.FC<GlobeProps> = ({
     const imagery = layers.addImageryProvider(provider); // sits above base
     imagery.alpha = GIBS_ALPHA;
     gibsLayerRef.current = imagery;
+    imagery.colorToAlpha = OCEAN_KEY;    // make near-this color transparent
+    imagery.colorToAlphaThreshold = OCEAN_KEY_THRESHOLD;
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-expect-error
@@ -246,8 +251,8 @@ const Globe: React.FC<GlobeProps> = ({
             </div>
           </label>
 
-          <button 
-            onClick={applySurface} 
+          <button
+            onClick={applySurface}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
           >
             Apply
