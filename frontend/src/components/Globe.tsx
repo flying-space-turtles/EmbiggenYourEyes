@@ -1,30 +1,29 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Viewer, Cartesian3, Color, Entity, Ion } from 'cesium';
-import 'cesium/Build/Cesium/Widgets/widgets.css';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Viewer, Cartesian3, Ion, Entity, Color } from "cesium";
+import "cesium/Build/Cesium/Widgets/widgets.css";
 
 interface GlobeProps {
   width?: string;
   height?: string;
+  flyToCoords?: { lat: number; lon: number } | null;
 }
 
-const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
+const Globe: React.FC<GlobeProps> = ({
+  width = "100%",
+  height = "500px",
+  flyToCoords,
+}) => {
   const cesiumContainer = useRef<HTMLDivElement>(null);
-  const viewer = useRef<Viewer | null>(null);
   const containerDiv = useRef<HTMLDivElement>(null);
+  const viewer = useRef<Viewer | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Initialize Cesium Viewer (runs only once)
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
-      // Set Cesium Ion access token
       const cesiumToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN;
-      if (cesiumToken && cesiumToken !== 'your-cesium-ion-token-here') {
-        Ion.defaultAccessToken = cesiumToken;
-        console.log('Cesium Ion token configured successfully');
-      } else {
-        console.warn('Cesium Ion token not configured. Some imagery may not be available. See CESIUM_SETUP.md for instructions.');
-      }
+      if (cesiumToken) Ion.defaultAccessToken = cesiumToken;
 
-      // Initialize Cesium viewer
       viewer.current = new Viewer(cesiumContainer.current, {
         timeline: false,
         animation: false,
@@ -51,15 +50,8 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
       // Add some sample points of interest
       addSampleLocations(viewer.current);
     }
-
-    // Cleanup function
-    return () => {
-      if (viewer.current) {
-        viewer.current.destroy();
-        viewer.current = null;
-      }
-    };
   }, []);
+
 
   const toggleFullscreen = useCallback(async () => {
     if (!containerDiv.current) return;
@@ -71,7 +63,7 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
         await document.exitFullscreen();
       }
     } catch (error) {
-      console.error('Error toggling fullscreen:', error);
+      console.error("Error toggling fullscreen:", error);
     }
   }, [isFullscreen]);
 
@@ -80,7 +72,7 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
     const handleFullscreenChange = () => {
       const newFullscreenState = !!document.fullscreenElement;
       setIsFullscreen(newFullscreenState);
-      
+
       // Resize Cesium viewer when fullscreen changes
       if (viewer.current) {
         setTimeout(() => {
@@ -88,37 +80,50 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
         }, 100);
       }
     };
-
     const handleKeyPress = (e: KeyboardEvent) => {
       // Press 'F' or 'f' to toggle fullscreen
-      if (e.key === 'f' || e.key === 'F') {
+      if (e.key === "f" || e.key === "F") {
         if (containerDiv.current?.contains(document.activeElement)) {
           e.preventDefault();
           toggleFullscreen();
         }
       }
       // Press Escape to exit fullscreen
-      if (e.key === 'Escape' && isFullscreen) {
+      if (e.key === "Escape" && isFullscreen) {
         document.exitFullscreen();
       }
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('keydown', handleKeyPress);
-    
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("keydown", handleKeyPress);
+
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('keydown', handleKeyPress);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("keydown", handleKeyPress);
     };
   }, [isFullscreen, toggleFullscreen]);
+
+  // Fly camera when coordinates change
+  useEffect(() => {
+    if (flyToCoords && viewer.current) {
+      viewer.current.camera.flyTo({
+        destination: Cartesian3.fromDegrees(
+          flyToCoords.lon,
+          flyToCoords.lat,
+          2000000
+        ),
+        duration: 3,
+      });
+    }
+  }, [flyToCoords]);
 
   const addSampleLocations = (cesiumViewer: Viewer) => {
     // Add NASA locations
     const locations = [
-      { name: 'NASA Goddard Space Flight Center', lat: 38.9964, lon: -76.8479 },
-      { name: 'NASA Kennedy Space Center', lat: 28.5721, lon: -80.6480 },
-      { name: 'NASA Johnson Space Center', lat: 29.5591, lon: -95.0907 },
-      { name: 'NASA Jet Propulsion Laboratory', lat: 34.2048, lon: -118.1711 },
+      { name: "NASA Goddard Space Flight Center", lat: 38.9964, lon: -76.8479 },
+      { name: "NASA Kennedy Space Center", lat: 28.5721, lon: -80.648 },
+      { name: "NASA Johnson Space Center", lat: 29.5591, lon: -95.0907 },
+      { name: "NASA Jet Propulsion Laboratory", lat: 34.2048, lon: -118.1711 },
     ];
 
     locations.forEach((location) => {
@@ -135,7 +140,7 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
           },
           label: {
             text: location.name,
-            font: '12pt Arial',
+            font: "12pt Arial",
             fillColor: Color.WHITE,
             outlineColor: Color.BLACK,
             outlineWidth: 2,
