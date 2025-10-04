@@ -145,9 +145,14 @@ function Home() {
             </div>
           </div>
 
-          <p className="text-gray-700">
-            Navigate to the <strong className="text-blue-600">Globe</strong> page to see the CesiumJS visualization!
-          </p>
+          <div className="text-gray-700 space-y-2">
+            <p>
+              Explore the cosmos with our interactive visualizations:
+            </p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li>🪐 <strong className="text-purple-600">Solar System</strong> - Explore our solar system and double-click Earth to zoom in!</li>
+            </ul>
+          </div>
         </div>
 
         <p className="text-gray-600">

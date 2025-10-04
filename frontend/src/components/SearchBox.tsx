@@ -1,97 +1,122 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { type FlyToCoords } from "../types/FlyToCoords";
 
-interface SearchBoxProps {
-  onResult: (data: { lat: number; lon: number; name: string; boundingbox?: [number, number, number, number] }) => void;
+interface SearchResult extends FlyToCoords {
+  name: string;
 }
 
-export default function SearchBox({ onResult }: SearchBoxProps) {
+interface SearchBoxProps {
+  onResult?: (data: FlyToCoords) => void;
+}
+
+const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [error, setError] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const debounceTimeout = useRef<number | null>(null);
+  const [timer, setTimer] = useState<NodezJS.Timeout | null>(null);
 
+  // Debounced fetch as user types
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const fetchSuggestions = async (value: string) => {
-    try {
-      const res = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(value)}`);
-      const data = await res.json();
-      if (res.ok && data.results) {
-        setSuggestions(data.results);
-        setIsOpen(true);
-      } else {
-        setSuggestions([]);
-        setIsOpen(false);
-      }
-    } catch {
-      setError("Could not connect to server");
-      setSuggestions([]);
-      setIsOpen(false);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setQuery(value);
-
-    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
-    if (!value) {
-      setSuggestions([]);
-      setIsOpen(false);
+    if (!query.trim()) {
+      setResults([]);
       return;
     }
 
-    debounceTimeout.current = window.setTimeout(() => fetchSuggestions(value), 300);
+    if (timer) clearTimeout(timer);
+
+    const newTimer = setTimeout(async () => {
+      try {
+        setError("");
+        const response = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        if (response.ok && data.results) {
+          setResults(data.results);
+        } else {
+          setResults([]);
+          setError(data.error || "No results found");
+        }
+      } catch (err) {
+        setError("Could not connect to the server: " + err);
+        setResults([]);
+      }
+    }, 300);
+
+    setTimer(newTimer);
+  }, [query]);
+
+  const handleSelect = (selected: SearchResult) => {
+    if (selected && onResult) {
+      onResult(selected);
+      setResults([]); // hide dropdown
+      setQuery(selected.name);
+    }
   };
 
-  const handleSelect = (item: any) => {
-    setQuery(item.name);
-    setIsOpen(false);
-    onResult(item);
-  };
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && query.trim()) {
+      try {
+        const response = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && suggestions.length > 0) {
-      handleSelect(suggestions[0]);
+        if (response.ok && data.results && data.results.length > 0) {
+          handleSelect(data.results[0]); // select the first result directly
+        } else {
+          setError("No matching location found.");
+        }
+      } catch (err) {
+        setError("Could not connect to the server: " + err);
+      }
     }
   };
 
   return (
-    <div className="relative w-full" ref={wrapperRef}>
-      <input
-        type="text"
-        placeholder="Search for a place..."
-        value={query}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        className="w-full p-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
+    <div className="flex flex-col items-end relative w-80">
+      <div className="relative w-full">
+        <input
+          type="text"
+          placeholder="Search for a place..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="w-full pl-10 pr-4 py-2 text-sm border border-white/20 rounded-lg bg-black/30 backdrop-blur-md placeholder-gray-300 text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400/50 focus:bg-black/50 shadow-lg transition-all h-10"
+        />
+        <svg 
+          className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-300"
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+          />
+        </svg>
+      </div>
 
-      {isOpen && suggestions.length > 0 && (
-        <ul className="absolute z-20 w-full bg-white border border-gray-300 rounded-md mt-1 shadow-lg max-h-60 overflow-auto">
-          {suggestions.map((item, idx) => (
-            <li
-              key={idx}
-              className="p-2 hover:bg-blue-500 hover:text-white cursor-pointer"
-              onClick={() => handleSelect(item)}
+      {/* Dropdown */}
+      {results.length > 0 && (
+        <div className="absolute top-full mt-2 w-full bg-black/80 text-white rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+          {results.map((res, i) => (
+            <button
+              key={i}
+              className="w-full text-left px-4 py-2 hover:bg-blue-600/50 transition-colors"
+              onClick={() => handleSelect(res)}
             >
-              {item.name}
-            </li>
+              {res.name}
+            </button>
           ))}
-        </ul>
+        </div>
       )}
 
-      {error && <p className="text-red-500 mt-1">{error}</p>}
+      {/* Error message */}
+      {error && (
+        <p className="mt-4 text-red-500 font-medium bg-white/60 px-3 py-2 rounded-lg shadow-lg backdrop-blur-md">{error}</p>
+      )}
     </div>
   );
 }
+
+export default SearchBox;
