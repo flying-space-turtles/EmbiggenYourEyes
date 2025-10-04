@@ -21,7 +21,7 @@ const GlobePage: React.FC = () => {
 
 
         <div className="rounded-xl bg-white p-5 shadow-lg">
-          <Globe height="800px" />
+          <Globe height="800px" flyToCoords={coords} />
         </div>
 
         <div className="mt-5 rounded-xl bg-white p-5 shadow-lg">

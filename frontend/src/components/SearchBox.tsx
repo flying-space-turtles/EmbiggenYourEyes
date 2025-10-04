@@ -28,7 +28,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
           setError(data.error || "Location not found");
         }
       } catch (err) {
-        setError("Could not connect to the server");
+        setError("Could not connect to the server: " + err);
       }
     }
   };

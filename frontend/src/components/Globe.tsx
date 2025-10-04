@@ -43,8 +43,6 @@ const Globe: React.FC<GlobeProps> = ({
     setShowScreenshotModal,
   });
 
-
-
   const handleDownloadScreenshot = () => {
     if (screenshotUrl) {
       downloadScreenshot(screenshotUrl);
