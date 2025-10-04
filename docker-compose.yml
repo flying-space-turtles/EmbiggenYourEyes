@@ -33,6 +33,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_CESIUM_ION_ACCESS_TOKEN=${VITE_CESIUM_ION_ACCESS_TOKEN}
     depends_on:
       - web
     expose:

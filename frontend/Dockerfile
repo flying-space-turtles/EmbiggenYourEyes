@@ -3,6 +3,11 @@
 # 1) build stage
 FROM node:24-alpine AS build
 WORKDIR /app
+
+# Accept build argument for Cesium token
+ARG VITE_CESIUM_ION_ACCESS_TOKEN
+ENV VITE_CESIUM_ION_ACCESS_TOKEN=$VITE_CESIUM_ION_ACCESS_TOKEN
+
 COPY package.json package-lock.json* pnpm-lock.yaml* ./
 # choose npm/yarn/pnpm accordingly (this example uses npm)
 RUN npm ci
