@@ -10,6 +10,7 @@ import {
   WebMercatorTilingScheme,
   Credit,
   ImageryLayer,
+  UrlTemplateImageryProvider,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
@@ -25,28 +26,25 @@ type GibsLayer = {
   format: "jpg" | "png";
 };
 
-// Mercator-only, known-good layers
+// Mercator-only, time-enabled layers (no BlueMarble)
 const LAYERS: GibsLayer[] = [
-  { id: "MODIS_Terra_CorrectedReflectance_TrueColor",  name: "MODIS Terra — True Color",         format: "jpg" },
-  { id: "MODIS_Aqua_CorrectedReflectance_TrueColor",   name: "MODIS Aqua — True Color",          format: "jpg" },
-  { id: "MODIS_Terra_CorrectedReflectance_Bands721",   name: "MODIS Terra — False Color (7-2-1)",format: "jpg" },
-  { id: "MODIS_Aqua_CorrectedReflectance_Bands721",    name: "MODIS Aqua — False Color (7-2-1)", format: "jpg" },
-  { id: "VIIRS_SNPP_CorrectedReflectance_TrueColor",   name: "VIIRS SNPP — True Color",           format: "jpg" },
-  { id: "BlueMarble_ShadedRelief",                      name: "Blue Marble — Shaded Relief",       format: "jpg" }, // static
+  { id: "MODIS_Terra_CorrectedReflectance_TrueColor",  name: "MODIS Terra — True Color",          format: "jpg" },
+  { id: "MODIS_Aqua_CorrectedReflectance_TrueColor",   name: "MODIS Aqua — True Color",           format: "jpg" },
+  { id: "MODIS_Terra_CorrectedReflectance_Bands721",   name: "MODIS Terra — False Color (7-2-1)", format: "jpg" },
+  { id: "MODIS_Aqua_CorrectedReflectance_Bands721",    name: "MODIS Aqua — False Color (7-2-1)",  format: "jpg" },
+  { id: "VIIRS_SNPP_CorrectedReflectance_TrueColor",   name: "VIIRS SNPP — True Color",            format: "jpg" },
 ];
 
 const TILEMATRIX_SET = "GoogleMapsCompatible_Level9";
 const MAX_LEVEL_3857 = 9;
 
-// Build a mercator WMTS provider for GIBS (no animations)
+// blend controls
+const BASE_ALPHA = 0.8; // default base map underneath
+const GIBS_ALPHA = 0.9;  // GIBS overlay on top
+
 function buildGibsProvider3857(layerId: string, time: string, format: "jpg" | "png") {
   const tilingScheme = new WebMercatorTilingScheme();
-
-  // RESTful WMTS template; Cesium will substitute {Time} via dimensions below
   const url = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerId}/default/{Time}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.${format}`;
-
-  // If time is "default", GIBS serves the latest available day
-  const dimensions = { Time: time };
 
   return new WebMapTileServiceImageryProvider({
     url,
@@ -57,25 +55,8 @@ function buildGibsProvider3857(layerId: string, time: string, format: "jpg" | "p
     tilingScheme,
     maximumLevel: MAX_LEVEL_3857,
     credit: new Credit("NASA GIBS"),
-    dimensions, // enables {Time} replacement
+    dimensions: { Time: time }, // substitutes {Time}
   });
-}
-
-function applyGibsBaseLayer(v: Viewer, layerId: string, time: string, format: "jpg" | "png"): ImageryLayer {
-  const layers = v.scene.imageryLayers;
-  layers.removeAll(); // replace current base layer
-  const provider = buildGibsProvider3857(layerId, time, format);
-  const imagery = layers.addImageryProvider(provider);
-
-  // Optional: log readiness/errors to help diagnose non-working layers/dates
-  // (won't throw; helps in console)
-  // @ts-ignore
-  provider.readyPromise?.then(
-    () => console.info(`[GIBS] Ready: ${layerId} @ ${time}`),
-    (e: any) => console.error(`[GIBS] Failed: ${layerId} @ ${time}`, e)
-  );
-
-  return imagery;
 }
 
 const Globe: React.FC<GlobeProps> = ({
@@ -88,15 +69,20 @@ const Globe: React.FC<GlobeProps> = ({
   const viewer = useRef<Viewer | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // UI state (Mercator-only)
+  // keep layer refs
+  const baseLayerRef = useRef<ImageryLayer | null>(null);
+  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+
+  // UI state
   const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
   const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
 
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
-      const cesiumToken = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
-      if (cesiumToken) Ion.defaultAccessToken = cesiumToken;
+      const token = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
+      if (token) Ion.defaultAccessToken = token;
 
+      // Do NOT pass imageryProvider; let Viewer attach its default (Ion) based on token.
       viewer.current = new Viewer(cesiumContainer.current, {
         timeline: false,
         animation: false,
@@ -109,11 +95,25 @@ const Globe: React.FC<GlobeProps> = ({
         baseLayerPicker: false,
       });
 
-      // Initial GIBS surface (Mercator WMTS)
-      const initial = LAYERS[0];
-      applyGibsBaseLayer(viewer.current, initial.id, "default", initial.format);
+      const layers = viewer.current.scene.imageryLayers;
 
-      // Default camera: whole Earth
+      // Grab default base layer (if any). If none (e.g., older builds or token issues), add OSM fallback.
+      baseLayerRef.current = layers.get(0) || null;
+      if (!baseLayerRef.current) {
+        const osm = new UrlTemplateImageryProvider({
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          credit: "© OpenStreetMap contributors",
+        });
+        baseLayerRef.current = layers.addImageryProvider(osm);
+        layers.lowerToBottom(baseLayerRef.current);
+      }
+      if (baseLayerRef.current) baseLayerRef.current.alpha = BASE_ALPHA;
+
+      // Add initial GIBS overlay
+      const initial = LAYERS[0];
+      applyGibsOverlay(initial.id, "default", initial.format);
+
+      // camera
       viewer.current.camera.setView({
         destination: Cartesian3.fromDegrees(0, 0, 2.0e7),
         orientation: { heading: 0, pitch: -1.57, roll: 0 },
@@ -127,6 +127,27 @@ const Globe: React.FC<GlobeProps> = ({
       viewer.current = null;
     };
   }, []);
+
+  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
+    if (!viewer.current) return;
+    const layers = viewer.current.scene.imageryLayers;
+
+    if (gibsLayerRef.current) {
+      layers.remove(gibsLayerRef.current, false);
+      gibsLayerRef.current = null;
+    }
+
+    const provider = buildGibsProvider3857(id, time, format);
+    const imagery = layers.addImageryProvider(provider); // sits above base
+    imagery.alpha = GIBS_ALPHA;
+    gibsLayerRef.current = imagery;
+
+    // @ts-ignore
+    provider.readyPromise?.then(
+      () => console.info(`[GIBS] Ready: ${id} @ ${time}`),
+      (e: any) => console.error(`[GIBS] Failed: ${id} @ ${time}`, e)
+    );
+  };
 
   // Fly camera when coordinates change
   useEffect(() => {
@@ -158,7 +179,7 @@ const Globe: React.FC<GlobeProps> = ({
           outlineWidth: 2,
           pixelOffset: new Cartesian2(0, -40),
           showBackground: true,
-          backgroundColor: Color.BLACK.withAlpha(0.7),
+          backgroundColor: Color.BLACK.withAlpha(0.9),
         },
       }));
     });
@@ -192,9 +213,8 @@ const Globe: React.FC<GlobeProps> = ({
   }, [toggleFullscreen]);
 
   const applySurface = () => {
-    if (!viewer.current) return;
     const meta = LAYERS.find(l => l.id === layerId)!;
-    applyGibsBaseLayer(viewer.current, layerId, dateStr, meta.format);
+    applyGibsOverlay(layerId, dateStr, meta.format);
   };
 
   return (
@@ -244,6 +264,10 @@ const Globe: React.FC<GlobeProps> = ({
           <button onClick={applySurface} style={{ padding: "6px 10px" }}>
             Apply
           </button>
+
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            Tip: tweak <code>BASE_ALPHA</code> and <code>GIBS_ALPHA</code> to change blending.
+          </div>
         </div>
       </div>
 
@@ -253,16 +277,7 @@ const Globe: React.FC<GlobeProps> = ({
         className="absolute left-2 top-2 z-10 rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
         title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen (F)"}
       >
-        {isFullscreen ? (
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        ) : (
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        )}
+        {isFullscreen ? "×" : "⤢"}
       </button>
 
       {/* Cesium Container */}
