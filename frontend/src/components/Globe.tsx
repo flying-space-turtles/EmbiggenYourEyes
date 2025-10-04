@@ -65,12 +65,50 @@ const Globe: React.FC<GlobeProps> = ({
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
 
+  // keep layer refs
+  const baseLayerRef = useRef<ImageryLayer | null>(null);
+  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+
+  // UI state
+  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
+  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
+
   // useCesiumViewer({ containerRef: cesiumContainer, viewer });
   useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
+
+  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
+    if (!viewer.current) return;
+    const layers = viewer.current.scene.imageryLayers;
+
+    if (gibsLayerRef.current) {
+      layers.remove(gibsLayerRef.current, false);
+      gibsLayerRef.current = null;
+    }
+
+    const provider = buildGibsProvider3857(id, time, format);
+    const imagery = layers.addImageryProvider(provider); // sits above base
+    imagery.alpha = GIBS_ALPHA;
+    gibsLayerRef.current = imagery;
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+    provider.readyPromise?.then(
+      () => console.info(`[GIBS] Ready: ${id} @ ${time}`),
+      (e: unknown) => console.error(`[GIBS] Failed: ${id} @ ${time}`, e)
+    );
+  };
+  
+  // Get current layer format for screenshots
+  const currentFormat = LAYERS.find(l => l.id === layerId)?.format || "jpg";
+  
   const { takeScreenshot, downloadScreenshot, closeScreenshotModal } = useScreenshot({
       viewer,
       setScreenshotUrl,
       setShowScreenshotModal,
+      applyGibsOverlay,
+      currentLayerId: layerId,
+      currentFormat,
+      currentDateStr: dateStr,
     });
 
   const handleDownloadScreenshot = () => {
@@ -87,17 +125,17 @@ const Globe: React.FC<GlobeProps> = ({
     setSearchCoords(data);
   };
 
-  // keep layer refs
-  const baseLayerRef = useRef<ImageryLayer | null>(null);
-  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+  const handleTakeScreenshot = () => {
+    takeScreenshot();
+  };
 
-  // UI state
-  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
-  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
+  const handleRetakeWithDate = async (date: string) => {
+    await takeScreenshot(date);
+  };
 
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
-      const token = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
+      const token = (import.meta as { env?: { VITE_CESIUM_ION_ACCESS_TOKEN?: string } }).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
       if (token) Ion.defaultAccessToken = token;
 
       // Do NOT pass imageryProvider; let Viewer attach its default (Ion) based on token.
@@ -146,28 +184,6 @@ const Globe: React.FC<GlobeProps> = ({
     };
   }, []);
 
-  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
-    if (!viewer.current) return;
-    const layers = viewer.current.scene.imageryLayers;
-
-    if (gibsLayerRef.current) {
-      layers.remove(gibsLayerRef.current, false);
-      gibsLayerRef.current = null;
-    }
-
-    const provider = buildGibsProvider3857(id, time, format);
-    const imagery = layers.addImageryProvider(provider); // sits above base
-    imagery.alpha = GIBS_ALPHA;
-    gibsLayerRef.current = imagery;
-
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-expect-error
-    provider.readyPromise?.then(
-      () => console.info(`[GIBS] Ready: ${id} @ ${time}`),
-      (e: any) => console.error(`[GIBS] Failed: ${id} @ ${time}`, e)
-    );
-  };
-
   const applySurface = () => {
     const meta = LAYERS.find(l => l.id === layerId)!;
     applyGibsOverlay(layerId, dateStr, meta.format);
@@ -180,7 +196,7 @@ const Globe: React.FC<GlobeProps> = ({
         <div className="flex items-start gap-3">
           <SearchBox onResult={handleSearchResult} />
           <button
-            onClick={takeScreenshot}
+            onClick={handleTakeScreenshot}
             className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
             title="Take Screenshot"
           >
@@ -272,6 +288,7 @@ const Globe: React.FC<GlobeProps> = ({
         screenshotUrl={screenshotUrl}
         onClose={handleCloseScreenshotModal}
         onDownload={handleDownloadScreenshot}
+        onRetakeWithDate={handleRetakeWithDate}
       />
     </div>
   );
