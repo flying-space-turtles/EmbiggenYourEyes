@@ -5,6 +5,7 @@ import cesium from 'vite-plugin-cesium'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), cesium()],
+  envDir: '../', // Look for .env files in the project root
   server: {
     proxy: {
       '/api': {
