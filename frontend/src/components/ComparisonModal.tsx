@@ -158,14 +158,15 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
 
           {/* Comparison View */}
           <div className="mb-4">
-            <div className="relative overflow-hidden rounded-lg border border-gray-200 shadow-lg bg-gray-100">
+            <div className="relative overflow-hidden rounded-lg border border-gray-200 shadow-lg bg-black">
               {/* Container for images */}
-              <div className="relative aspect-video max-h-[45vh] min-h-[250px] sm:min-h-[300px]">
+              <div className="relative w-full h-[400px] sm:h-[500px] bg-black">
               {/* After Image (background - right side) */}
               <img
                 src={afterImage}
                 alt={`After - ${afterDate}`}
                 className="absolute inset-0 w-full h-full object-cover"
+                style={{ objectPosition: 'center' }}
               />
               
               {/* Before Image (clipped by slider - left side) */}
@@ -177,6 +178,7 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
                   src={beforeImage}
                   alt={`Before - ${beforeDate}`}
                   className="w-full h-full object-cover"
+                  style={{ objectPosition: 'center' }}
                 />
               </div>
               
@@ -310,30 +312,6 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
                 </div>
               </div>
         </div>
-
-          {/* Side by Side Preview */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <div className="text-center">
-              <div className="relative overflow-hidden rounded border border-gray-200 bg-gray-100">
-                <img
-                  src={beforeImage}
-                  alt={`Before - ${beforeDate}`}
-                  className="w-full h-16 object-cover"
-                />
-              </div>
-              <p className="text-xs text-gray-600 mt-1 font-medium">Before: {beforeDate}</p>
-            </div>
-            <div className="text-center">
-              <div className="relative overflow-hidden rounded border border-gray-200 bg-gray-100">
-                <img
-                  src={afterImage}
-                  alt={`After - ${afterDate}`}
-                  className="w-full h-16 object-cover"
-                />
-              </div>
-              <p className="text-xs text-gray-600 mt-1 font-medium">After: {afterDate}</p>
-            </div>
-          </div>
 
           {/* Modal Actions */}
           <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-gray-200 mt-4">
