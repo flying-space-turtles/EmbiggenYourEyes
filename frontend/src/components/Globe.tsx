@@ -20,9 +20,6 @@ type GibsLayer = {
   format: "jpg" | "png";
 };
 
-const OCEAN_KEY = Color.fromBytes(0, 70, 140, 255); // tweak to match your tiles
-const OCEAN_KEY_THRESHOLD = 0.25;
-
 // Mercator-only, time-enabled layers (no BlueMarble)
 const LAYERS: GibsLayer[] = [
   { id: "MODIS_Terra_CorrectedReflectance_TrueColor",  name: "MODIS Terra — True Color",          format: "jpg" },
@@ -161,15 +158,77 @@ const Globe: React.FC<GlobeProps> = ({
     const provider = buildGibsProvider3857(id, time, format);
     const imagery = layers.addImageryProvider(provider); // sits above base
     imagery.alpha = GIBS_ALPHA;
+
+    // Handle tiles that fail to load or return placeholder images
+    imagery.show = true; // Start visible, hide on errors
+
+    // Smart error tracking with automatic reset
+    let errorCount = 0;
+    let successCount = 0;
+    let lastResetTime = Date.now();
+    let tileRequestCount = 0;
+
+    // Reset error state based on time and success rate
+    const checkAndResetErrorState = () => {
+      const now = Date.now();
+      const timeSinceReset = now - lastResetTime;
+
+      // Reset every 10 seconds OR if success rate improves significantly
+      const successRate = tileRequestCount > 0 ? successCount / tileRequestCount : 0;
+
+      if (timeSinceReset > 10000 || (successRate > 0.5 && errorCount > 0)) {
+        if (errorCount > 0) {
+          console.log(`Resetting GIBS error state: ${errorCount} errors, ${successCount} successes in ${timeSinceReset}ms`);
+          errorCount = 0;
+          successCount = 0;
+          tileRequestCount = 0;
+          imagery.alpha = GIBS_ALPHA; // Reset to full opacity
+        }
+        lastResetTime = now;
+      }
+    };    const originalRequestImage = provider.requestImage?.bind(provider);
+    if (originalRequestImage) {
+      provider.requestImage = function(x: number, y: number, level: number, request?: any) {
+        const promise = originalRequestImage(x, y, level, request);
+        if (promise) {
+          tileRequestCount++;
+
+          promise.then(() => {
+            // Success!
+            successCount++;
+            checkAndResetErrorState();
+          }).catch(() => {
+            // Error - no data available
+            errorCount++;
+
+            // Check if we should reset based on time/success rate
+            checkAndResetErrorState();
+
+            // If still many errors after reset check, reduce visibility
+            if (errorCount > 8 && imagery.alpha > 0.2) {
+              imagery.alpha = Math.max(0.2, imagery.alpha * 0.85);
+              console.log(`GIBS: Reducing opacity to ${imagery.alpha.toFixed(2)} due to ${errorCount} tile errors`);
+            }
+          });
+        }
+        return promise;
+      };
+    }
+
     gibsLayerRef.current = imagery;
-    imagery.colorToAlpha = OCEAN_KEY;    // make near-this color transparent
-    imagery.colorToAlphaThreshold = OCEAN_KEY_THRESHOLD;
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-expect-error
     provider.readyPromise?.then(
-      () => console.info(`[GIBS] Ready: ${id} @ ${time}`),
-      (e: any) => console.error(`[GIBS] Failed: ${id} @ ${time}`, e)
+      () => {
+        console.info(`[GIBS] Ready: ${id} @ ${time}`);
+        if (imagery) imagery.show = true;
+      },
+      (e: any) => {
+        console.error(`[GIBS] Failed: ${id} @ ${time}`, e);
+        // Hide layer completely when GIBS fails so base layer shows
+        if (imagery) imagery.show = false;
+      }
     );
   };
 
