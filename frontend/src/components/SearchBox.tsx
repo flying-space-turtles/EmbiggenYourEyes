@@ -1,16 +1,14 @@
 // src/components/SearchBox.jsx
-import React, { useState } from "react";
-
-
+import { useState } from "react";
 
 interface SearchBoxProps {
   onResult?: (data: { lat: number; lon: number; name: string }) => void;
 }
 
 const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
-  const [query, setQuery] = React.useState("");
-  const [result, setResult] = React.useState<any>(null);
-  const [error, setError] = React.useState("");
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState<{ lat: number; lon: number; name: string } | null>(null);
+  const [error, setError] = useState("");
 
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim()) {
@@ -28,31 +26,48 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
           setError(data.error || "Location not found");
         }
       } catch (err) {
-        setError("Could not connect to the server");
+        setError("Could not connect to the server: " + err);
       }
     }
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "50px" }}>
-      <input
-        type="text"
-        placeholder="Search for a place..."
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={handleSearch}
-        style={{ padding: "8px", width: "300px", fontSize: "16px", borderRadius: "5px", border: "1px solid #ccc" }}
-      />
+    <div className="flex flex-col items-end">
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search for a place..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleSearch}
+          className="w-80 pl-10 pr-4 py-2 text-sm border border-white/20 rounded-lg bg-black/30 backdrop-blur-md placeholder-gray-300 text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400/50 focus:bg-black/50 shadow-lg transition-all h-10"
+        />
+        <svg 
+          className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-300"
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+          />
+        </svg>
+      </div>
 
       {result && (
-        <div style={{ marginTop: "20px", padding: "10px", background: "#000000ff", borderRadius: "8px" }}>
-          <p><strong>{result.name}</strong></p>
-          <p>Latitude: {result.lat}</p>
-          <p>Longitude: {result.lon}</p>
+        <div className="mt-4 p-4 bg-black/70 text-white rounded-lg shadow-lg backdrop-blur-md">
+          <p className="font-semibold text-lg">{result.name}</p>
+          <p className="text-gray-300">Latitude: {result.lat}</p>
+          <p className="text-gray-300">Longitude: {result.lon}</p>
         </div>
       )}
 
-      {error && <p style={{ color: "red", marginTop: "20px" }}>{error}</p>}
+      {error && (
+        <p className="mt-4 text-red-500 font-medium bg-white/60 px-3 py-2 rounded-lg shadow-lg backdrop-blur-md">{error}</p>
+      )}
     </div>
   );
 };
