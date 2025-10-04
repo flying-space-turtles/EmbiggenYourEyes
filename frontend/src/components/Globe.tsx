@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme, Color } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
+import ComparisonModal from "./ComparisonModal";
 import SearchBox from "./SearchBox";
 import { useScreenshot } from "../hooks/useScreenshot";
+import { useComparisonScreenshot } from "../hooks/useComparisonScreenshot";
 import { useFlyToCoords } from "../hooks/useFlyToCoords";
 import { type FlyToCoords } from "../types/FlyToCoords";
 import { addSampleLocations } from "../utils/cesiumHelpers";
@@ -65,28 +67,6 @@ const Globe: React.FC<GlobeProps> = ({
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
 
-  // useCesiumViewer({ containerRef: cesiumContainer, viewer });
-  useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
-  const { takeScreenshot, downloadScreenshot, closeScreenshotModal } = useScreenshot({
-      viewer,
-      setScreenshotUrl,
-      setShowScreenshotModal,
-    });
-
-  const handleDownloadScreenshot = () => {
-    if (screenshotUrl) {
-      downloadScreenshot(screenshotUrl);
-    }
-  };
-
-  const handleCloseScreenshotModal = () => {
-    closeScreenshotModal(screenshotUrl);
-  };
-
-  const handleSearchResult = (data: FlyToCoords) => {
-    setSearchCoords(data);
-  };
-
   // keep layer refs
   const baseLayerRef = useRef<ImageryLayer | null>(null);
   const gibsLayerRef = useRef<ImageryLayer | null>(null);
@@ -95,56 +75,12 @@ const Globe: React.FC<GlobeProps> = ({
   const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
   const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
 
-  useEffect(() => {
-    if (cesiumContainer.current && !viewer.current) {
-      const token = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
-      if (token) Ion.defaultAccessToken = token;
+  // useCesiumViewer({ containerRef: cesiumContainer, viewer });
+  useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
 
-      // Do NOT pass imageryProvider; let Viewer attach its default (Ion) based on token.
-      viewer.current = new Viewer(cesiumContainer.current, {
-        timeline: false,
-        animation: false,
-        fullscreenButton: false,
-        vrButton: false,
-        geocoder: false,
-        sceneModePicker: false,
-        navigationHelpButton: false,
-        homeButton: true,
-        baseLayerPicker: false,
-      });
 
-      const layers = viewer.current.scene.imageryLayers;
-
-      // Grab default base layer (if any). If none (e.g., older builds or token issues), add OSM fallback.
-      baseLayerRef.current = layers.get(0) || null;
-      if (!baseLayerRef.current) {
-        const osm = new UrlTemplateImageryProvider({
-          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-          credit: "© OpenStreetMap contributors",
-        });
-        baseLayerRef.current = layers.addImageryProvider(osm);
-        layers.lowerToBottom(baseLayerRef.current);
-      }
-      if (baseLayerRef.current) baseLayerRef.current.alpha = BASE_ALPHA;
-
-      // Add initial GIBS overlay
-      const initial = LAYERS[0];
-      applyGibsOverlay(initial.id, "default", initial.format);
-
-      // camera
-      viewer.current.camera.setView({
-        destination: Cartesian3.fromDegrees(0, 0, 2.0e7),
-        orientation: { heading: 0, pitch: -1.57, roll: 0 },
-      });
-
-      addSampleLocations(viewer.current);
-    }
-
-    return () => {
-      viewer.current?.destroy();
-      viewer.current = null;
-    };
-  }, []);
+  // Get current layer format for screenshots
+  const currentFormat = LAYERS.find(l => l.id === layerId)?.format || "jpg";
 
   const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
     if (!viewer.current) return;
@@ -232,6 +168,128 @@ const Globe: React.FC<GlobeProps> = ({
     );
   };
 
+  const { takeScreenshot, downloadScreenshot, closeScreenshotModal, waitForImageryToLoad } = useScreenshot({
+      viewer,
+      setScreenshotUrl,
+      setShowScreenshotModal,
+      applyGibsOverlay,
+      currentLayerId: layerId,
+      currentFormat,
+      currentDateStr: dateStr,
+    });
+
+  // Comparison screenshot functionality
+  const {
+    comparisonImages,
+    showComparisonModal,
+    takeComparisonScreenshots,
+    downloadComparisonImages,
+    closeComparisonModal,
+  } = useComparisonScreenshot({
+    viewer,
+    applyGibsOverlay,
+    currentLayerId: layerId,
+    currentFormat,
+    currentDateStr: dateStr,
+    waitForImageryToLoad,
+  });
+
+  const handleDownloadScreenshot = () => {
+    if (screenshotUrl) {
+      downloadScreenshot(screenshotUrl);
+    }
+  };
+
+  const handleCloseScreenshotModal = () => {
+    closeScreenshotModal(screenshotUrl);
+  };
+
+  const handleSearchResult = (data: FlyToCoords) => {
+    setSearchCoords(data);
+  };
+
+  const handleTakeScreenshot = () => {
+    takeScreenshot();
+  };
+
+  const handleRetakeWithDate = async (date: string) => {
+    await takeScreenshot(date);
+  };
+
+  const handleComparisonScreenshot = () => {
+    // Default to current date and a date one year ago
+    const currentDate = new Date().toISOString().slice(0, 10);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const beforeDate = oneYearAgo.toISOString().slice(0, 10);
+
+    takeComparisonScreenshots(beforeDate, currentDate);
+  };
+
+  const handleRetakeComparisonImages = async (beforeDate: string, afterDate: string) => {
+    await takeComparisonScreenshots(beforeDate, afterDate);
+  };
+
+  const handleDownloadComparison = () => {
+    downloadComparisonImages();
+  };
+
+  const handleCloseComparisonModal = () => {
+    closeComparisonModal();
+  };
+
+  useEffect(() => {
+    if (cesiumContainer.current && !viewer.current) {
+      const token = (import.meta as { env?: { VITE_CESIUM_ION_ACCESS_TOKEN?: string } }).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
+      if (token) Ion.defaultAccessToken = token;
+
+      // Do NOT pass imageryProvider; let Viewer attach its default (Ion) based on token.
+      viewer.current = new Viewer(cesiumContainer.current, {
+        timeline: false,
+        animation: false,
+        fullscreenButton: false,
+        vrButton: false,
+        geocoder: false,
+        sceneModePicker: false,
+        navigationHelpButton: false,
+        homeButton: true,
+        baseLayerPicker: false,
+      });
+
+      const layers = viewer.current.scene.imageryLayers;
+
+      // Grab default base layer (if any). If none (e.g., older builds or token issues), add OSM fallback.
+      baseLayerRef.current = layers.get(0) || null;
+      if (!baseLayerRef.current) {
+        const osm = new UrlTemplateImageryProvider({
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          credit: "© OpenStreetMap contributors",
+        });
+        baseLayerRef.current = layers.addImageryProvider(osm);
+        layers.lowerToBottom(baseLayerRef.current);
+      }
+      if (baseLayerRef.current) baseLayerRef.current.alpha = BASE_ALPHA;
+
+      // Add initial GIBS overlay
+      const initial = LAYERS[0];
+      applyGibsOverlay(initial.id, "default", initial.format);
+
+      // camera
+      viewer.current.camera.setView({
+        destination: Cartesian3.fromDegrees(0, 0, 2.0e7),
+        orientation: { heading: 0, pitch: -1.57, roll: 0 },
+      });
+
+      addSampleLocations(viewer.current);
+    }
+
+    return () => {
+      viewer.current?.destroy();
+      viewer.current = null;
+    };
+  }, []);
+
+
   const applySurface = () => {
     const meta = LAYERS.find(l => l.id === layerId)!;
     applyGibsOverlay(layerId, dateStr, meta.format);
@@ -244,7 +302,7 @@ const Globe: React.FC<GlobeProps> = ({
         <div className="flex items-start gap-3">
           <SearchBox onResult={handleSearchResult} />
           <button
-            onClick={takeScreenshot}
+            onClick={handleTakeScreenshot}
             className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
             title="Take Screenshot"
           >
@@ -265,6 +323,25 @@ const Globe: React.FC<GlobeProps> = ({
                 strokeLinejoin="round"
                 strokeWidth={2}
                 d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          </button>
+          <button
+            onClick={handleComparisonScreenshot}
+            className="rounded-lg bg-purple-600/90 p-2 text-white transition-all hover:bg-purple-700/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+            title="Take Before/After Comparison"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8V4a1 1 0 011-1h4M20 8V4a1 1 0 00-1-1h-4M4 16v4a1 1 0 001 1h4M20 16v4a1 1 0 01-1 1h-4M9 12h6M12 9l3 3-3 3"
               />
             </svg>
           </button>
@@ -336,6 +413,19 @@ const Globe: React.FC<GlobeProps> = ({
         screenshotUrl={screenshotUrl}
         onClose={handleCloseScreenshotModal}
         onDownload={handleDownloadScreenshot}
+        onRetakeWithDate={handleRetakeWithDate}
+      />
+
+      {/* Comparison Modal */}
+      <ComparisonModal
+        isOpen={showComparisonModal}
+        beforeImage={comparisonImages?.beforeImage || null}
+        afterImage={comparisonImages?.afterImage || null}
+        beforeDate={comparisonImages?.beforeDate || ''}
+        afterDate={comparisonImages?.afterDate || ''}
+        onClose={handleCloseComparisonModal}
+        onDownload={handleDownloadComparison}
+        onRetakeImages={handleRetakeComparisonImages}
       />
     </div>
   );

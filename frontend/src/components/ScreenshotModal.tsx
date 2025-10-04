@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface ScreenshotModalProps {
   isOpen: boolean;
   screenshotUrl: string | null;
   onClose: () => void;
   onDownload: () => void;
+  onRetakeWithDate?: (date: string) => void; // New prop for retaking with specific date
 }
 
 const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
@@ -12,10 +13,28 @@ const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
   screenshotUrl,
   onClose,
   onDownload,
+  onRetakeWithDate,
 }) => {
+  const [screenshotDate, setScreenshotDate] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [isRetaking, setIsRetaking] = useState(false);
+
   if (!isOpen || !screenshotUrl) {
     return null;
   }
+
+  const handleRetakeWithDate = async () => {
+    if (onRetakeWithDate && !isRetaking) {
+      setIsRetaking(true);
+      try {
+        await onRetakeWithDate(screenshotDate);
+      } finally {
+        // Reset loading state after a delay to ensure screenshot completes
+        setTimeout(() => setIsRetaking(false), 1000);
+      }
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
@@ -33,6 +52,44 @@ const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
             </svg>
           </button>
         </div>
+
+        {/* Date Selection for Screenshot */}
+        {onRetakeWithDate && (
+          <div className="mb-4 rounded-lg bg-gray-50 p-3">
+            <div className="flex items-center gap-3">
+              <label className="flex-1">
+                <span className="text-sm font-medium text-gray-700">Screenshot Date:</span>
+                <input
+                  type="date"
+                  value={screenshotDate}
+                  onChange={(e) => setScreenshotDate(e.target.value)}
+                  className="mt-1 w-full rounded border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
+                />
+              </label>
+              <button
+                onClick={handleRetakeWithDate}
+                disabled={isRetaking}
+                className="rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isRetaking ? (
+                  <>
+                    <svg className="inline-block w-4 h-4 mr-2 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                      <path fill="currentColor" className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading...
+                  </>
+                ) : (
+                  <>📸 Retake</>
+                )}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-600">
+              Change the date and retake the screenshot without affecting the main view.
+              {isRetaking && <span className="block text-blue-600 font-medium mt-1">⏳ Loading satellite imagery for selected date...</span>}
+            </p>
+          </div>
+        )}
 
         {/* Screenshot Image */}
         <div className="mb-4 flex justify-center">
