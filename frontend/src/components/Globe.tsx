@@ -290,4 +290,7 @@ const Globe: React.FC<GlobeProps> = ({
   );
 };
 
-export default Globe;
+export default Globe;  const toggleFullscreen = useCallback(async () => {
+    if (!containerDiv.current) return;
+    if (!document.fullscreenElement) await containerDiv.current.requestFullscreen();
+    else await document.exitFullscreen();
