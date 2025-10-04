@@ -23,34 +23,9 @@ services:
     depends_on:
       - db
     volumes:
-      - ./backend:/app  # for development. Remove in production to use only image
+      - ./backend:/app  # for development hot reload
     ports:
-      - "8000:8000"  # Expose Django backend to localhost for development
-    networks:
-      - webnet
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_CESIUM_ION_ACCESS_TOKEN=${VITE_CESIUM_ION_ACCESS_TOKEN}
-    depends_on:
-      - web
-    expose:
-      - "80"
-    networks:
-      - webnet
-
-  reverse-proxy:
-    image: nginx:stable
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - frontend
-      - web
+      - "8000:8000"  # Expose Django backend directly to localhost
     networks:
       - webnet
 

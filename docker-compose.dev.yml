@@ -1,29 +1,11 @@
 version: "3.8"
 
 services:
-  frontend-dev:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"  # Expose Vite dev server
+  # Frontend runs locally via `npm run dev` at http://localhost:5173
+  # This file contains development-specific overrides for backend services
+  
+  web:
     environment:
-      - VITE_CESIUM_ION_ACCESS_TOKEN=${VITE_CESIUM_ION_ACCESS_TOKEN}
-    volumes:
-      - ./frontend/src:/app/src:ro  # Mount source code for hot reload
-      - ./frontend/public:/app/public:ro
-      - ./frontend/package.json:/app/package.json:ro
-      - ./frontend/vite.config.ts:/app/vite.config.ts:ro
-      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
-      - ./frontend/tsconfig.app.json:/app/tsconfig.app.json:ro
-      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json:ro
-      - ./frontend/index.html:/app/index.html:ro
-    depends_on:
-      - web
-    networks:
-      - webnet
-
-  # Override the reverse proxy for development
-  reverse-proxy:
-    volumes:
-      - ./nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - DJANGO_DEBUG=True
+      - DJANGO_LOG_LEVEL=DEBUG
+    # Volume is already mounted in base compose for hot reload
