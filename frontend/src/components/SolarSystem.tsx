@@ -147,14 +147,13 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       let entity;
       
       if (p.name === 'Earth') {
-        // Create realistic Earth with Blue Marble imagery
         entity = viewer.entities.add({
           name: p.name,
           position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
           ellipsoid: {
             radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
             material: new Cesium.ImageMaterialProperty({
-              image: 'https://cesiumjs.org/tutorials/creating-entities/images/earth.jpg',
+              image: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
               transparent: false
             })
           }

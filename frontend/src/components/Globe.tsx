@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Viewer } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import ScreenshotModal from './ScreenshotModal';
+import SearchBox from './SearchBox';
 import { useCesiumViewer } from '../hooks/useCesiumViewer';
 import { useScreenshot } from '../hooks/useScreenshot';
 import { useFlyToCoords } from '../hooks/useFlyToCoords';
@@ -22,9 +23,10 @@ const Globe: React.FC<GlobeProps> = ({
   const viewer = useRef<Viewer | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
+  const [searchCoords, setSearchCoords] = useState<{ lat: number; lon: number } | null>(null);
 
   useCesiumViewer({ containerRef: cesiumContainer, viewer });
-  useFlyToCoords({ viewer, flyToCoords });
+  useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
   const { takeScreenshot, downloadScreenshot, closeScreenshotModal } = useScreenshot({
     viewer,
     setScreenshotUrl,
@@ -41,16 +43,22 @@ const Globe: React.FC<GlobeProps> = ({
     closeScreenshotModal(screenshotUrl);
   };
 
+  const handleSearchResult = (data: { lat: number; lon: number; name: string }) => {
+    setSearchCoords({ lat: data.lat, lon: data.lon });
+  };
+
   return (
     <div 
       ref={containerDiv}
       className="relative"
       style={{ width, height }}
     >
-      <div className="absolute right-4 top-4 z-10">
+      {/* Top Right Controls */}
+      <div className="absolute right-4 top-4 z-20 flex items-start gap-3">
+        <SearchBox onResult={handleSearchResult} />
         <button
           onClick={takeScreenshot}
-          className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+          className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50 mt-1"
           title="Take Screenshot"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
