@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import Globe from './Globe';
+import Mars from './Mars';
+
 
 interface SolarSystemProps {
   width?: string;
@@ -34,22 +36,29 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
   const viewerRef = useRef<ExtendedViewer | null>(null);
   const navigate = useNavigate();
   const [isGlobeView, setIsGlobeView] = useState(false);
+  const [isMarsView, setIsMarsView] = useState(false);
 
   const returnToSolarSystem = () => {
+    console.log('🚀 Returning to solar system from Mars/Globe...');
     setIsGlobeView(false);
-    // Small delay to allow Globe component to unmount
+    setIsMarsView(false);
+    // Small delay to allow Globe/Mars component to unmount
     setTimeout(() => {
       // Re-show all entities that were hidden during transition
       if (viewerRef.current) {
         const viewer = viewerRef.current;        
         // Show all entities in the viewer (planets, sun, rings)
+        console.log('🔄 Re-showing all entities...');
         viewer.entities.values.forEach((entity) => {
           entity.show = true;
         });
         
         // Reset view to show full solar system
         if (viewer.planetNavigation) {
+          console.log('🔄 Resetting planet navigation view...');
           viewer.planetNavigation.resetView();
+        } else {
+          console.log('❌ No planetNavigation found');
         }
       }
     }, 100);
@@ -58,12 +67,11 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
   useEffect(() => {
     if (!cesiumContainer.current) return;
     
-    // Only initialize if we don't already have a viewer and we're not in globe view
-    if (viewerRef.current || isGlobeView) {
+    // Only initialize if we don't already have a viewer and we're not in globe or mars view
+    if (viewerRef.current || isGlobeView || isMarsView) {
+      console.log('⏭️ Skipping viewer initialization - already have viewer or in detailed view');
       return;
-    }
-
-    // Initialize Cesium viewer
+    }    // Initialize Cesium viewer
     const viewer = new Cesium.Viewer(cesiumContainer.current, {
       timeline: false,
       animation: false,
@@ -142,6 +150,19 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
             radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
             material: new Cesium.ImageMaterialProperty({
               image: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
+
+              transparent: false
+            })
+          }
+        });
+      } else if (p.name === 'Mars') {
+        entity = viewer.entities.add({
+          name: p.name,
+          position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+          ellipsoid: {
+            radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+            material: new Cesium.ImageMaterialProperty({
+              image: '/mars-texture.svg',
               transparent: false
             })
           }
@@ -332,6 +353,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
 
     // Smooth transition to Globe view
     const transitionToGlobeView = () => {
+      // Clear any existing view states
+      setIsGlobeView(false);
+      setIsMarsView(false);
+      
       // First, smoothly zoom into Earth
       const earthPlanet = planetEntities.find(p => p.name === 'Earth');
       if (earthPlanet) {
@@ -373,6 +398,55 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       }
     };
 
+    // Smooth transition to Mars view
+    const transitionToMarsView = () => {
+      console.log('🔴 Starting Mars transition...');
+      // Clear any existing view states
+      setIsGlobeView(false);
+      setIsMarsView(false);
+      
+      // First, smoothly zoom into Mars
+      const marsPlanet = planetEntities.find(p => p.name === 'Mars');
+      if (marsPlanet) {
+        const marsPosition = marsPlanet.entity.position!.getValue(viewer.clock.currentTime);
+        if (marsPosition) {
+          // Hide other planets during transition
+          planetEntities.forEach(planet => {
+            if (planet.name !== 'Mars') {
+              planet.entity.show = false;
+            }
+          });
+          sunEntity.show = false;
+
+          // Start Mars mounting early for smoother transition
+          setTimeout(() => {
+            console.log('🔴 Setting isMarsView to true');
+            setIsMarsView(true);
+          }, 800);
+
+          // Zoom very close to Mars with smoother animation
+          viewer.camera.flyTo({
+            destination: new Cesium.Cartesian3(
+              marsPosition.x + marsPlanet.radius * 1.2,
+              marsPosition.y,
+              marsPosition.z + marsPlanet.radius * 0.3
+            ),
+            orientation: {
+              direction: Cesium.Cartesian3.normalize(
+                Cesium.Cartesian3.subtract(marsPosition, 
+                  new Cesium.Cartesian3(marsPosition.x + marsPlanet.radius * 1.2, marsPosition.y, marsPosition.z + marsPlanet.radius * 0.3),
+                  new Cesium.Cartesian3()
+                ), new Cesium.Cartesian3()
+              ),
+              up: Cesium.Cartesian3.UNIT_Z
+            },
+            duration: 1.5,
+            easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT
+          });
+        }
+      }
+    };
+
     // Double-click handler
     const canvas = viewer.cesiumWidget.canvas;
     canvas.addEventListener('dblclick', function(event) {
@@ -387,6 +461,12 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         if (entity.name === 'Earth') {
           // Start smooth transition to Globe view
           transitionToGlobeView();
+          return;
+        }
+        
+        if (entity.name === 'Mars') {
+          // Start smooth transition to Mars view
+          transitionToMarsView();
           return;
         }
 
@@ -463,7 +543,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         viewerRef.current = null;
       }
     };
-  }, [navigate, isGlobeView]); // Add navigate and isGlobeView as dependencies
+  }, [navigate, isGlobeView, isMarsView]); // Add navigate, isGlobeView, and isMarsView as dependencies
 
   const resetCamera = (viewer: Cesium.Viewer, saturnPlanet: { distance: number } | null) => {
     if (!saturnPlanet) return;
@@ -507,6 +587,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
   };
 
   if (isGlobeView) {
+    console.log('🌍 Rendering Globe view');
     return (
       <div 
         style={{ width, height }} 
@@ -524,6 +605,31 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
             title="Return to Solar System"
           >
             🚀 ← Back to Solar System
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isMarsView) {
+    console.log('🔴 Rendering Mars view');
+    return (
+      <div 
+        style={{ width, height }} 
+        className="relative animate-fadeIn"
+        key="mars-view"
+      >
+        {/* Mars Component with back button */}
+        <Mars height={height} width={width} />
+        
+        {/* Back to Solar System Button */}
+        <div className="absolute left-4 top-4 z-30 bg-black/70 text-white p-3 rounded-lg backdrop-blur-sm">
+          <button 
+            onClick={returnToSolarSystem}
+            className="px-4 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors flex items-center gap-2"
+            title="Return to Solar System"
+          >
+            🔴 ← Back to Solar System
           </button>
         </div>
       </div>
