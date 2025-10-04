@@ -28,6 +28,12 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [showHint, setShowHint] = useState(true);
 
+  // Update local state when props change
+  useEffect(() => {
+    setNewBeforeDate(beforeDate);
+    setNewAfterDate(afterDate);
+  }, [beforeDate, afterDate]);
+
   // Auto-hide hint after 4 seconds
   useEffect(() => {
     if (showHint) {
@@ -63,6 +69,10 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
 
   const handleRetakeImages = async () => {
     if (onRetakeImages && !isRetaking) {
+      console.log('ComparisonModal: Retaking images with dates:', { 
+        before: newBeforeDate, 
+        after: newAfterDate 
+      });
       setIsRetaking(true);
       try {
         await onRetakeImages(newBeforeDate, newAfterDate);
@@ -151,21 +161,21 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
             <div className="relative overflow-hidden rounded-lg border border-gray-200 shadow-lg bg-gray-100">
               {/* Container for images */}
               <div className="relative aspect-video max-h-[45vh] min-h-[250px] sm:min-h-[300px]">
-              {/* Before Image (background) */}
+              {/* After Image (background - right side) */}
               <img
-                src={beforeImage}
-                alt={`Before - ${beforeDate}`}
+                src={afterImage}
+                alt={`After - ${afterDate}`}
                 className="absolute inset-0 w-full h-full object-cover"
               />
               
-              {/* After Image (clipped by slider) */}
+              {/* Before Image (clipped by slider - left side) */}
               <div 
                 className="absolute inset-0 overflow-hidden"
                 style={{ clipPath: `inset(0 ${100 - sliderValue}% 0 0)` }}
               >
                 <img
-                  src={afterImage}
-                  alt={`After - ${afterDate}`}
+                  src={beforeImage}
+                  alt={`Before - ${beforeDate}`}
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -296,7 +306,7 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
               {/* Instructions */}
               <div className="mt-3 text-center">
                 <div className="text-xs text-gray-500">
-                  Drag the divider or click anywhere to compare • {Math.round(sliderValue)}% After Image
+                  Drag the divider or click anywhere to compare • {Math.round(sliderValue)}% Before Image
                 </div>
               </div>
         </div>

@@ -13,7 +13,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [error, setError] = useState("");
-  const [timer, setTimer] = useState<NodezJS.Timeout | null>(null);
+  const [timer, setTimer] = useState<number | null>(null);
 
   // Debounced fetch as user types
   useEffect(() => {
