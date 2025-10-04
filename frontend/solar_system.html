@@ -36,6 +36,11 @@
     Double-Click: Focus on Objects
   </div>
 
+  <div id="planetNav" style="display: none;">
+    <button id="prevPlanet" style="position: absolute; left: 20px; top: 50%; transform: translateY(-50%); z-index: 1001; background: rgba(255,255,255,0.9); border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; cursor: pointer;">‹</button>
+    <button id="nextPlanet" style="position: absolute; right: 20px; top: 50%; transform: translateY(-50%); z-index: 1001; background: rgba(255,255,255,0.9); border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; cursor: pointer;">›</button>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/cesium/Build/Cesium/Cesium.js"></script>
   <script>
     if (!window.Cesium) {
@@ -56,7 +61,19 @@
     });
 
     viewer.scene.globe.show = false;
-    viewer.scene.backgroundColor = Cesium.Color.BLACK;
+    viewer.scene.backgroundColor = Cesium.Color.BLACK;  
+
+    // Keep stars and sun, but remove unwanted elements
+    viewer.scene.skyBox.show = true;              // Keep stars ✅
+    viewer.scene.sun.show = true;                 // Keep sun for lighting ✅
+    viewer.scene.moon.show = false;               // Remove moon ❌
+    viewer.scene.skyAtmosphere.show = false;      // Remove atmosphere ❌
+
+    // Remove any default imagery layers that might show rings
+    viewer.scene.imageryLayers.removeAll();
+
+    // Keep lighting from the sun
+    viewer.scene.globe.enableLighting = true;
 
     // Robustly prevent browser context menu on the Cesium canvas (mandatory for right-drag behavior)
     const canvas = viewer.cesiumWidget.canvas;
@@ -96,7 +113,7 @@
       name: 'Sun',
       position: Cesium.Cartesian3.fromElements(0, 0, 0),
       ellipsoid: {
-        radii: new Cesium.Cartesian3(500000, 500000, 500000),
+        radii: new Cesium.Cartesian3(696340, 696340, 696340), // Real sun radius in km
         material: Cesium.Color.ORANGE
       }
     });
@@ -113,7 +130,7 @@
       { name: 'Neptune', color: Cesium.Color.DEEPSKYBLUE, distance: 12e6, radius: 240000 }
     ];
 
-    // Add planets
+     // Add planets
     planets.forEach((p) => {
       p.entity = viewer.entities.add({
         name: p.name,
@@ -129,6 +146,31 @@
     let currentPlanetView = null;
     let isInFocusMode = false;
 
+    // Add Earth's Moon
+    const earthPlanet = planets.find(p => p.name === 'Earth');
+    const moonDistance = 300000;
+    const moonEntity = viewer.entities.add({
+    name: 'Moon',
+    position: Cesium.Cartesian3.fromElements(
+        earthPlanet.distance + moonDistance, 
+        0, 
+        0
+    ),
+    ellipsoid: {
+        radii: new Cesium.Cartesian3(30000, 30000, 30000), // Made much bigger for visibility
+        material: Cesium.Color.LIGHTGRAY
+    }
+    });
+
+    // Add Moon to planets array so it can be focused on and hidden/shown properly
+    planets.push({ 
+    name: 'Moon', 
+    color: Cesium.Color.LIGHTGRAY, 
+    distance: earthPlanet.distance + moonDistance, 
+    radius: 30000, // Updated to match the entity
+    entity: moonEntity 
+    });
+
     // Camera setup
     function enableFreeMovement() {
       viewer.scene.screenSpaceCameraController.enableRotate = true;
@@ -138,32 +180,67 @@
       viewer.scene.screenSpaceCameraController.enableLook = true;
     }
 
+    // Replace the resetCamera function (lines 155-164) with this enhanced version:
+
     function resetCamera() {
-      viewer.camera.flyTo({
-        destination: new Cesium.Cartesian3(15e6, 0, 8e6),
-        duration: 1.5,
-        complete: function() {
-          enableFreeMovement();
-        }
-      });
-      currentPlanetView = null;
-      isInFocusMode = false;
-      document.getElementById('status').textContent = 'Status: Solar System View';
+        // Show all planets and the sun again
+        planets.forEach(planet => {
+            planet.entity.show = true;
+        });
+        sunEntity.show = true;
+        
+        viewer.camera.flyTo({
+            destination: new Cesium.Cartesian3(15e6, 0, 8e6),
+            duration: 1.5,
+            complete: function() {
+            enableFreeMovement();
+            }
+        });
+        currentPlanetView = null;
+        isInFocusMode = false;
+        document.getElementById('status').textContent = 'Status: Solar System View';
     }
 
+    // Replace the focusOnObject function (lines 165-185) with this enhanced version:
+
     function focusOnObject(position, radius, name) {
-      isInFocusMode = true;
-      const cameraDistance = radius * 4;
-      viewer.camera.flyTo({
-        destination: new Cesium.Cartesian3(
-          position.x + cameraDistance,
-          position.y + cameraDistance * 0.3,
-          position.z + cameraDistance * 0.5
-        ),
-        duration: 2.0,
-        complete() { enableFreeMovement(); }
-      });
-      document.getElementById('status').textContent = `Status: Focused on ${name} (double-click to exit or move freely)`;
+        isInFocusMode = true;
+        
+        // Hide all other planets and the sun when focusing on one object
+        planets.forEach(planet => {
+            if (planet.name !== name) {
+            planet.entity.show = false;
+            }
+        });
+        
+        // Hide the sun unless we're focusing on it
+        if (name !== 'Sun') {
+            sunEntity.show = false;
+        }
+        
+        // Calculate distance to see the whole planet nicely
+        const cameraDistance = radius * 8;
+        
+        viewer.camera.flyTo({
+            destination: new Cesium.Cartesian3(
+            position.x + cameraDistance,
+            position.y,
+            position.z + cameraDistance * 0.3
+            ),
+            orientation: {
+            direction: Cesium.Cartesian3.normalize(
+                Cesium.Cartesian3.subtract(position, 
+                new Cesium.Cartesian3(position.x + cameraDistance, position.y, position.z + cameraDistance * 0.3),
+                new Cesium.Cartesian3()
+                ), new Cesium.Cartesian3()
+            ),
+            up: Cesium.Cartesian3.UNIT_Z
+            },
+            duration: 2.0,
+            complete() { enableFreeMovement(); }
+        });
+        
+        document.getElementById('status').textContent = `Status: Focused on ${name} (double-click to exit or move freely)`;
     }
 
     resetCamera();
@@ -185,9 +262,9 @@
           const planetPosition = entity.position.getValue(viewer.clock.currentTime);
           focusOnObject(planetPosition, planet.radius, planet.name);
         } else if (entity.name === 'Sun') {
-          currentPlanetView = { name: 'Sun', radius: 500000 };
-          const sunPosition = entity.position.getValue(viewer.clock.currentTime);
-          focusOnObject(sunPosition, 500000, 'Sun');
+            currentPlanetView = { name: 'Sun', radius: 696340 }; // Use real sun radius
+            const sunPosition = entity.position.getValue(viewer.clock.currentTime);
+            focusOnObject(sunPosition, 696340, 'Sun'); // Use real sun radius
         }
       } else {
         if (currentPlanetView) resetCamera();
@@ -196,24 +273,24 @@
 
     // Hover effects for visual feedback
     viewer.cesiumWidget.canvas.addEventListener('mousemove', function(event) {
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      const pickedObject = viewer.scene.pick({ x, y });
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const pickedObject = viewer.scene.pick({ x, y });
 
-      if (pickedObject && pickedObject.id) {
-        const entity = pickedObject.id;
-        const isPlanet = planets.some(p => p.name === entity.name) || entity.name === 'Sun';
-        if (isPlanet) {
-          viewer.canvas.style.cursor = 'pointer';
-          if (!currentPlanetView) document.getElementById('status').textContent = `Status: Double-click to focus on ${entity.name}`;
+        if (pickedObject && pickedObject.id) {
+            const entity = pickedObject.id;
+            const isPlanet = planets.some(p => p.name === entity.name) || entity.name === 'Sun' || entity.name === 'Moon';
+            if (isPlanet) {
+            viewer.canvas.style.cursor = 'pointer';
+            if (!currentPlanetView) document.getElementById('status').textContent = `Status: Double-click to focus on ${entity.name}`;
+            } else {
+            viewer.canvas.style.cursor = 'default';
+            }
         } else {
-          viewer.canvas.style.cursor = 'default';
+            viewer.canvas.style.cursor = 'default';
+            if (!currentPlanetView && !isInFocusMode) document.getElementById('status').textContent = 'Status: ready';
         }
-      } else {
-        viewer.canvas.style.cursor = 'default';
-        if (!currentPlanetView && !isInFocusMode) document.getElementById('status').textContent = 'Status: ready';
-      }
     });
 
     // Reset button
