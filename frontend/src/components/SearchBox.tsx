@@ -1,16 +1,14 @@
 // src/components/SearchBox.jsx
-import React, { useState } from "react";
-
-
+import { useState } from "react";
 
 interface SearchBoxProps {
   onResult?: (data: { lat: number; lon: number; name: string }) => void;
 }
 
 const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
-  const [query, setQuery] = React.useState("");
-  const [result, setResult] = React.useState<any>(null);
-  const [error, setError] = React.useState("");
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState<{ lat: number; lon: number; name: string } | null>(null);
+  const [error, setError] = useState("");
 
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim()) {
@@ -28,31 +26,33 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
           setError(data.error || "Location not found");
         }
       } catch (err) {
-        setError("Could not connect to the server");
+        setError("Could not connect to the server: " + err);
       }
     }
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "50px" }}>
+    <div className="flex flex-col items-center mt-12 mb-8">
       <input
         type="text"
         placeholder="Search for a place..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleSearch}
-        style={{ padding: "8px", width: "300px", fontSize: "16px", borderRadius: "5px", border: "1px solid #ccc" }}
+        className="w-80 px-4 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
       />
 
       {result && (
-        <div style={{ marginTop: "20px", padding: "10px", background: "#000000ff", borderRadius: "8px" }}>
-          <p><strong>{result.name}</strong></p>
-          <p>Latitude: {result.lat}</p>
-          <p>Longitude: {result.lon}</p>
+        <div className="mt-6 p-4 bg-black/90 text-white rounded-lg shadow-lg">
+          <p className="font-semibold text-lg">{result.name}</p>
+          <p className="text-gray-300">Latitude: {result.lat}</p>
+          <p className="text-gray-300">Longitude: {result.lon}</p>
         </div>
       )}
 
-      {error && <p style={{ color: "red", marginTop: "20px" }}>{error}</p>}
+      {error && (
+        <p className="mt-6 text-red-500 font-medium">{error}</p>
+      )}
     </div>
   );
 };
