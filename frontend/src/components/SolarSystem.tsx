@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
+import Globe from './Globe';
 
 interface SolarSystemProps {
   width?: string;
@@ -32,10 +33,48 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
   const cesiumContainer = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ExtendedViewer | null>(null);
   const navigate = useNavigate();
+  const [isGlobeView, setIsGlobeView] = useState(false);
+
+  const returnToSolarSystem = () => {
+    console.log('🚀 Returning to solar system...');
+    setIsGlobeView(false);
+    // Small delay to allow Globe component to unmount
+    setTimeout(() => {
+      // Re-show all entities that were hidden during transition
+      if (viewerRef.current) {
+        const viewer = viewerRef.current;
+        console.log('📊 Viewer found, entities count:', viewer.entities.values.length);
+        
+        // Show all entities in the viewer (planets, sun, rings)
+        viewer.entities.values.forEach((entity, index) => {
+          console.log(`🪐 Entity ${index}: ${entity.name || 'unnamed'}, show: ${entity.show} -> true`);
+          entity.show = true;
+        });
+        
+        // Reset view to show full solar system
+        if (viewer.planetNavigation) {
+          console.log('🔄 Calling resetView...');
+          viewer.planetNavigation.resetView();
+        } else {
+          console.log('❌ No planetNavigation found');
+        }
+      } else {
+        console.log('❌ No viewer found');
+      }
+    }, 100);
+  };
 
   useEffect(() => {
+    console.log('🔄 useEffect running, isGlobeView:', isGlobeView);
     if (!cesiumContainer.current) return;
+    
+    // Only initialize if we don't already have a viewer and we're not in globe view
+    if (viewerRef.current || isGlobeView) {
+      console.log('⏭️ Skipping viewer initialization - already have viewer or in Globe view');
+      return;
+    }
 
+    console.log('🌌 Initializing Cesium viewer...');
     // Initialize Cesium viewer
     const viewer = new Cesium.Viewer(cesiumContainer.current, {
       timeline: false,
@@ -105,14 +144,33 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     // Add planets
     const planetEntities: { name: string; entity: Cesium.Entity; distance: number; radius: number; rings?: Cesium.Entity[] }[] = [];
     planets.forEach((p) => {
-      const entity = viewer.entities.add({
-        name: p.name,
-        position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
-        ellipsoid: {
-          radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
-          material: p.color
-        }
-      });
+      let entity;
+      
+      if (p.name === 'Earth') {
+        // Create realistic Earth with Blue Marble imagery
+        entity = viewer.entities.add({
+          name: p.name,
+          position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+          ellipsoid: {
+            radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+            material: new Cesium.ImageMaterialProperty({
+              image: 'https://cesiumjs.org/tutorials/creating-entities/images/earth.jpg',
+              transparent: false
+            })
+          }
+        });
+      } else {
+        // Create other planets with solid colors
+        entity = viewer.entities.add({
+          name: p.name,
+          position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+          ellipsoid: {
+            radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+            material: p.color
+          }
+        });
+      }
+      
       planetEntities.push({ ...p, entity });
     });
 
@@ -285,6 +343,52 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     // Set initial camera view
     resetToSystemView();
 
+    // Smooth transition to Globe view
+    const transitionToGlobeView = () => {
+      console.log('🌍 Starting transition to Globe view...');
+      // First, smoothly zoom into Earth
+      const earthPlanet = planetEntities.find(p => p.name === 'Earth');
+      if (earthPlanet) {
+        const earthPosition = earthPlanet.entity.position!.getValue(viewer.clock.currentTime);
+        if (earthPosition) {
+          // Hide other planets during transition
+          console.log('🫥 Hiding planets and sun...');
+          planetEntities.forEach(planet => {
+            if (planet.name !== 'Earth') {
+              console.log(`🫥 Hiding ${planet.name}`);
+              planet.entity.show = false;
+            }
+          });
+          console.log('🫥 Hiding sun');
+          sunEntity.show = false;
+
+          // Zoom very close to Earth with smoother animation
+          viewer.camera.flyTo({
+            destination: new Cesium.Cartesian3(
+              earthPosition.x + earthPlanet.radius * 1.2,
+              earthPosition.y,
+              earthPosition.z + earthPlanet.radius * 0.3
+            ),
+            orientation: {
+              direction: Cesium.Cartesian3.normalize(
+                Cesium.Cartesian3.subtract(earthPosition, 
+                  new Cesium.Cartesian3(earthPosition.x + earthPlanet.radius * 1.2, earthPosition.y, earthPosition.z + earthPlanet.radius * 0.3),
+                  new Cesium.Cartesian3()
+                ), new Cesium.Cartesian3()
+              ),
+              up: Cesium.Cartesian3.UNIT_Z
+            },
+            duration: 1.5,
+            easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
+            complete: () => {
+              // Immediate switch to Globe view for seamless transition
+              setIsGlobeView(true);
+            }
+          });
+        }
+      }
+    };
+
     // Double-click handler
     const canvas = viewer.cesiumWidget.canvas;
     canvas.addEventListener('dblclick', function(event) {
@@ -297,7 +401,8 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         const entity = pickedObject.id;
         
         if (entity.name === 'Earth') {
-          navigate('/globe');
+          // Start smooth transition to Globe view
+          transitionToGlobeView();
           return;
         }
 
@@ -374,7 +479,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         viewerRef.current = null;
       }
     };
-  }, [navigate]); // Add navigate as dependency since it's used in the effect
+  }, [navigate, isGlobeView]); // Add navigate and isGlobeView as dependencies
 
   const resetCamera = (viewer: Cesium.Viewer, saturnPlanet: { distance: number } | null) => {
     if (!saturnPlanet) return;
@@ -417,6 +522,30 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     }
   };
 
+  if (isGlobeView) {
+    return (
+      <div 
+        style={{ width, height }} 
+        className="relative animate-fadeIn"
+        key="globe-view"
+      >
+        {/* Globe Component with back button */}
+        <Globe height={height} width={width} />
+        
+        {/* Back to Solar System Button */}
+        <div className="absolute left-4 top-4 z-30 bg-black/70 text-white p-3 rounded-lg backdrop-blur-sm">
+          <button 
+            onClick={returnToSolarSystem}
+            className="px-4 py-2 bg-purple-500 text-white rounded text-sm hover:bg-purple-600 transition-colors flex items-center gap-2"
+            title="Return to Solar System"
+          >
+            🚀 ← Back to Solar System
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ width, height }} className="relative">
       <div
@@ -453,7 +582,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           </button>
         </div>
         <div className="text-xs text-gray-300">
-          Double-click Earth to explore! 🌍<br />
+          Earth now shows realistic surface! 🌍<br />
           Double-click planets to focus
         </div>
       </div>
@@ -468,7 +597,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           <strong className="text-purple-300">Double-Click Planets: Focus View</strong><br />
           <strong className="text-purple-300">Arrow Keys: Navigate Planets</strong><br />
           <strong className="text-purple-300">Space: Reset to System View</strong><br />
-          <strong className="text-blue-300">Double-Click Earth: Go to Globe 🌍</strong>
+          <strong className="text-blue-300">Double-Click Earth: Smooth Globe Transition 🌍</strong>
         </div>
       </div>
     </div>
