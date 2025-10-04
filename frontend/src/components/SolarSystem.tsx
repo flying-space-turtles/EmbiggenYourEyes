@@ -36,45 +36,33 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
   const [isGlobeView, setIsGlobeView] = useState(false);
 
   const returnToSolarSystem = () => {
-    console.log('🚀 Returning to solar system...');
     setIsGlobeView(false);
     // Small delay to allow Globe component to unmount
     setTimeout(() => {
       // Re-show all entities that were hidden during transition
       if (viewerRef.current) {
-        const viewer = viewerRef.current;
-        console.log('📊 Viewer found, entities count:', viewer.entities.values.length);
-        
+        const viewer = viewerRef.current;        
         // Show all entities in the viewer (planets, sun, rings)
         viewer.entities.values.forEach((entity, index) => {
-          console.log(`🪐 Entity ${index}: ${entity.name || 'unnamed'}, show: ${entity.show} -> true`);
           entity.show = true;
         });
         
         // Reset view to show full solar system
         if (viewer.planetNavigation) {
-          console.log('🔄 Calling resetView...');
           viewer.planetNavigation.resetView();
-        } else {
-          console.log('❌ No planetNavigation found');
         }
-      } else {
-        console.log('❌ No viewer found');
       }
     }, 100);
   };
 
   useEffect(() => {
-    console.log('🔄 useEffect running, isGlobeView:', isGlobeView);
     if (!cesiumContainer.current) return;
     
     // Only initialize if we don't already have a viewer and we're not in globe view
     if (viewerRef.current || isGlobeView) {
-      console.log('⏭️ Skipping viewer initialization - already have viewer or in Globe view');
       return;
     }
 
-    console.log('🌌 Initializing Cesium viewer...');
     // Initialize Cesium viewer
     const viewer = new Cesium.Viewer(cesiumContainer.current, {
       timeline: false,
@@ -344,21 +332,17 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
 
     // Smooth transition to Globe view
     const transitionToGlobeView = () => {
-      console.log('🌍 Starting transition to Globe view...');
       // First, smoothly zoom into Earth
       const earthPlanet = planetEntities.find(p => p.name === 'Earth');
       if (earthPlanet) {
         const earthPosition = earthPlanet.entity.position!.getValue(viewer.clock.currentTime);
         if (earthPosition) {
           // Hide other planets during transition
-          console.log('🫥 Hiding planets and sun...');
           planetEntities.forEach(planet => {
             if (planet.name !== 'Earth') {
-              console.log(`🫥 Hiding ${planet.name}`);
               planet.entity.show = false;
             }
           });
-          console.log('🫥 Hiding sun');
           sunEntity.show = false;
 
           // Start Globe mounting early for smoother transition
