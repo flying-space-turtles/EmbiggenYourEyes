@@ -26,9 +26,8 @@ def geocode_search(request):
     if not query:
         return JsonResponse({"error": "Missing query parameter 'q'."}, status=400)
 
-    # Call Nominatim API
-    url = f"https://nominatim.openstreetmap.org/search"
-    params = {"format": "json", "q": query}
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {"format": "json", "q": query, "limit": 10}  # return up to 10 suggestions
     headers = {"User-Agent": "django-geocoder"}
 
     response = requests.get(url, params=params, headers=headers)
@@ -37,10 +36,21 @@ def geocode_search(request):
     if not data:
         return JsonResponse({"error": "Location not found."}, status=404)
 
-    result = {
-        "name": data[0]["display_name"],
-        "lat": float(data[0]["lat"]),
-        "lon": float(data[0]["lon"]),
-    }
-    return JsonResponse(result)
+    # map to needed fields + bounding box
+    results = []
+    for item in data:
+        result = {
+            "name": item["display_name"],
+            "lat": float(item["lat"]),
+            "lon": float(item["lon"]),
+        }
+        if "boundingbox" in item:
+            result["boundingbox"] = [
+                float(item["boundingbox"][0]),
+                float(item["boundingbox"][1]),
+                float(item["boundingbox"][2]),
+                float(item["boundingbox"][3]),
+            ]
+        results.append(result)
 
+    return JsonResponse({"results": results})

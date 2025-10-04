@@ -1,60 +1,97 @@
-// src/components/SearchBox.jsx
-import React, { useState } from "react";
-
-
+import React, { useState, useEffect, useRef } from "react";
 
 interface SearchBoxProps {
-  onResult?: (data: { lat: number; lon: number; name: string }) => void;
+  onResult: (data: { lat: number; lon: number; name: string; boundingbox?: [number, number, number, number] }) => void;
 }
 
-const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
-  const [query, setQuery] = React.useState("");
-  const [result, setResult] = React.useState<any>(null);
-  const [error, setError] = React.useState("");
+export default function SearchBox({ onResult }: SearchBoxProps) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const debounceTimeout = useRef<number | null>(null);
 
-  const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && query.trim()) {
-      try {
-        setError("");
-        setResult(null);
-
-        const response = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(query)}`);
-        const data = await response.json();
-
-        if (response.ok) {
-          setResult(data);
-          if (onResult) onResult(data); // send coordinates to Globe
-        } else {
-          setError(data.error || "Location not found");
-        }
-      } catch (err) {
-        setError("Could not connect to the server");
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
       }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchSuggestions = async (value: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (res.ok && data.results) {
+        setSuggestions(data.results);
+        setIsOpen(true);
+      } else {
+        setSuggestions([]);
+        setIsOpen(false);
+      }
+    } catch {
+      setError("Could not connect to server");
+      setSuggestions([]);
+      setIsOpen(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setQuery(value);
+
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    if (!value) {
+      setSuggestions([]);
+      setIsOpen(false);
+      return;
+    }
+
+    debounceTimeout.current = window.setTimeout(() => fetchSuggestions(value), 300);
+  };
+
+  const handleSelect = (item: any) => {
+    setQuery(item.name);
+    setIsOpen(false);
+    onResult(item);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && suggestions.length > 0) {
+      handleSelect(suggestions[0]);
     }
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "50px" }}>
+    <div className="relative w-full" ref={wrapperRef}>
       <input
         type="text"
         placeholder="Search for a place..."
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={handleSearch}
-        style={{ padding: "8px", width: "300px", fontSize: "16px", borderRadius: "5px", border: "1px solid #ccc" }}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        className="w-full p-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
-      {result && (
-        <div style={{ marginTop: "20px", padding: "10px", background: "#000000ff", borderRadius: "8px" }}>
-          <p><strong>{result.name}</strong></p>
-          <p>Latitude: {result.lat}</p>
-          <p>Longitude: {result.lon}</p>
-        </div>
+      {isOpen && suggestions.length > 0 && (
+        <ul className="absolute z-20 w-full bg-white border border-gray-300 rounded-md mt-1 shadow-lg max-h-60 overflow-auto">
+          {suggestions.map((item, idx) => (
+            <li
+              key={idx}
+              className="p-2 hover:bg-blue-500 hover:text-white cursor-pointer"
+              onClick={() => handleSelect(item)}
+            >
+              {item.name}
+            </li>
+          ))}
+        </ul>
       )}
 
-      {error && <p style={{ color: "red", marginTop: "20px" }}>{error}</p>}
+      {error && <p className="text-red-500 mt-1">{error}</p>}
     </div>
   );
-};
-
-export default SearchBox;
+}

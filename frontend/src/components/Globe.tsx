@@ -5,8 +5,14 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 interface GlobeProps {
   width?: string;
   height?: string;
-  flyToCoords?: { lat: number; lon: number } | null;
+  flyToCoords?: {
+    lat: number;
+    lon: number;
+    name?: string;
+    boundingbox?: [number, number, number, number]; // [south, north, west, east]
+  } | null;
 }
+
 
 const Globe: React.FC<GlobeProps> = ({
   width = "100%",
@@ -103,19 +109,29 @@ const Globe: React.FC<GlobeProps> = ({
     };
   }, [isFullscreen, toggleFullscreen]);
 
-  // Fly camera when coordinates change
   useEffect(() => {
     if (flyToCoords && viewer.current) {
+      let distance = 2000000; // default zoom
+
+      if (flyToCoords.boundingbox) {
+        const [south, north, west, east] = flyToCoords.boundingbox;
+        const latDiff = north - south;
+        const lonDiff = east - west;
+        const maxDiff = Math.max(latDiff, lonDiff);
+
+        if (maxDiff < 0.05) distance = 5000;      // city
+        else if (maxDiff < 0.5) distance = 20000; // town
+        else if (maxDiff < 5) distance = 100000;  // region
+        else distance = 2000000;                  // country/large area
+      }
+
       viewer.current.camera.flyTo({
-        destination: Cartesian3.fromDegrees(
-          flyToCoords.lon,
-          flyToCoords.lat,
-          2000000
-        ),
+        destination: Cartesian3.fromDegrees(flyToCoords.lon, flyToCoords.lat, distance),
         duration: 3,
       });
     }
   }, [flyToCoords]);
+
 
   const addSampleLocations = (cesiumViewer: Viewer) => {
     // Add NASA locations

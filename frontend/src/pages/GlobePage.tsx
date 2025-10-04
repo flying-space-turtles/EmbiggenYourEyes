@@ -2,26 +2,38 @@ import React, { useState } from 'react';
 import Globe from '../components/Globe';
 import SearchBox from "../components/SearchBox";
 
+interface Location {
+  lat: number;
+  lon: number;
+  name: string;
+  boundingbox?: [number, number, number, number];
+}
+
 const GlobePage: React.FC = () => {
-  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
 
   return (
-    <div style={{ padding: '20px', minHeight: '100vh', backgroundColor: '#f0f0f0' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <h1 style={{ textAlign: 'center', marginBottom: '20px', color: '#333', fontSize: '2.5rem' }}>
-          🌍 NASA Space Visualization
-        </h1>
-        
-        <p style={{ textAlign: 'center', marginBottom: '30px', color: '#666', fontSize: '1.1rem' }}>
-          Explore NASA facilities and space missions around the globe using CesiumJS
-        </p>
+    <div className="p-5 min-h-screen bg-gray-100 flex flex-col items-center">
+      {/* Centered SearchBox */}
+      <div className="w-full max-w-md mb-5">
+        <SearchBox onResult={(data) => setSelectedLocation(data)} />
+      </div>
 
-        {/* Pass callback to receive search coordinates */}
-        <SearchBox onResult={(data) => setCoords({ lat: data.lat, lon: data.lon })} />
+      {/* Globe container */}
+      <div className="w-full flex-1 rounded-lg overflow-hidden shadow-md">
+        <Globe width="100%" height="100%" flyToCoords={selectedLocation} />
+      </div>
 
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-          <Globe height="600px" flyToCoords={coords} />
-        </div>
+      {/* Features section */}
+      <div className="mt-5 p-5 bg-white rounded-lg shadow-md w-full max-w-6xl">
+        <h3 className="text-gray-800 mb-4 text-xl font-semibold">Features:</h3>
+        <ul className="text-gray-600 leading-7 list-disc list-inside">
+          <li>🏢 NASA facility locations marked on the globe</li>
+          <li>🌐 Interactive 3D Earth visualization</li>
+          <li>🔍 Mouse controls: Left-click and drag, scroll to zoom</li>
+          <li>🏠 Home button to reset view</li>
+          <li>📍 Click on markers to see facility information</li>
+        </ul>
       </div>
     </div>
   );
