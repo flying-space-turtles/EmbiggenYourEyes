@@ -1,11 +1,81 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Viewer, Cartesian3, Ion, Entity, Color } from "cesium";
+import {
+  Viewer,
+  Cartesian3,
+  Cartesian2,
+  Ion,
+  Entity,
+  Color,
+  WebMapTileServiceImageryProvider,
+  WebMercatorTilingScheme,
+  Credit,
+  ImageryLayer,
+} from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 interface GlobeProps {
   width?: string;
   height?: string;
   flyToCoords?: { lat: number; lon: number } | null;
+}
+
+type GibsLayer = {
+  id: string;
+  name: string;
+  format: "jpg" | "png";
+};
+
+// Mercator-only, known-good layers
+const LAYERS: GibsLayer[] = [
+  { id: "MODIS_Terra_CorrectedReflectance_TrueColor",  name: "MODIS Terra — True Color",         format: "jpg" },
+  { id: "MODIS_Aqua_CorrectedReflectance_TrueColor",   name: "MODIS Aqua — True Color",          format: "jpg" },
+  { id: "MODIS_Terra_CorrectedReflectance_Bands721",   name: "MODIS Terra — False Color (7-2-1)",format: "jpg" },
+  { id: "MODIS_Aqua_CorrectedReflectance_Bands721",    name: "MODIS Aqua — False Color (7-2-1)", format: "jpg" },
+  { id: "VIIRS_SNPP_CorrectedReflectance_TrueColor",   name: "VIIRS SNPP — True Color",           format: "jpg" },
+  { id: "BlueMarble_ShadedRelief",                      name: "Blue Marble — Shaded Relief",       format: "jpg" }, // static
+];
+
+const TILEMATRIX_SET = "GoogleMapsCompatible_Level9";
+const MAX_LEVEL_3857 = 9;
+
+// Build a mercator WMTS provider for GIBS (no animations)
+function buildGibsProvider3857(layerId: string, time: string, format: "jpg" | "png") {
+  const tilingScheme = new WebMercatorTilingScheme();
+
+  // RESTful WMTS template; Cesium will substitute {Time} via dimensions below
+  const url = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerId}/default/{Time}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.${format}`;
+
+  // If time is "default", GIBS serves the latest available day
+  const dimensions = { Time: time };
+
+  return new WebMapTileServiceImageryProvider({
+    url,
+    layer: layerId,
+    style: "default",
+    format: format === "png" ? "image/png" : "image/jpeg",
+    tileMatrixSetID: TILEMATRIX_SET,
+    tilingScheme,
+    maximumLevel: MAX_LEVEL_3857,
+    credit: new Credit("NASA GIBS"),
+    dimensions, // enables {Time} replacement
+  });
+}
+
+function applyGibsBaseLayer(v: Viewer, layerId: string, time: string, format: "jpg" | "png"): ImageryLayer {
+  const layers = v.scene.imageryLayers;
+  layers.removeAll(); // replace current base layer
+  const provider = buildGibsProvider3857(layerId, time, format);
+  const imagery = layers.addImageryProvider(provider);
+
+  // Optional: log readiness/errors to help diagnose non-working layers/dates
+  // (won't throw; helps in console)
+  // @ts-ignore
+  provider.readyPromise?.then(
+    () => console.info(`[GIBS] Ready: ${layerId} @ ${time}`),
+    (e: any) => console.error(`[GIBS] Failed: ${layerId} @ ${time}`, e)
+  );
+
+  return imagery;
 }
 
 const Globe: React.FC<GlobeProps> = ({
@@ -18,10 +88,13 @@ const Globe: React.FC<GlobeProps> = ({
   const viewer = useRef<Viewer | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Initialize Cesium Viewer (runs only once)
+  // UI state (Mercator-only)
+  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
+  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
+
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
-      const cesiumToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN;
+      const cesiumToken = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
       if (cesiumToken) Ion.defaultAccessToken = cesiumToken;
 
       viewer.current = new Viewer(cesiumContainer.current, {
@@ -36,144 +109,158 @@ const Globe: React.FC<GlobeProps> = ({
         baseLayerPicker: false,
       });
 
-      // Set the initial camera position
-    // Set default view to show entire Earth
-    viewer.current.camera.setView({
-      destination: Cartesian3.fromDegrees(0.0, 0.0, 20000000), // Above equator, showing full Earth
-      orientation: {
-        heading: 0.0,
-        pitch: -1.57, // Looking straight down
-        roll: 0.0,
-      },
-    });
+      // Initial GIBS surface (Mercator WMTS)
+      const initial = LAYERS[0];
+      applyGibsBaseLayer(viewer.current, initial.id, "default", initial.format);
 
-      // Add some sample points of interest
+      // Default camera: whole Earth
+      viewer.current.camera.setView({
+        destination: Cartesian3.fromDegrees(0, 0, 2.0e7),
+        orientation: { heading: 0, pitch: -1.57, roll: 0 },
+      });
+
       addSampleLocations(viewer.current);
     }
-  }, []);
-
-
-  const toggleFullscreen = useCallback(async () => {
-    if (!containerDiv.current) return;
-
-    try {
-      if (!isFullscreen) {
-        await containerDiv.current.requestFullscreen();
-      } else {
-        await document.exitFullscreen();
-      }
-    } catch (error) {
-      console.error("Error toggling fullscreen:", error);
-    }
-  }, [isFullscreen]);
-
-  // Fullscreen functionality
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const newFullscreenState = !!document.fullscreenElement;
-      setIsFullscreen(newFullscreenState);
-
-      // Resize Cesium viewer when fullscreen changes
-      if (viewer.current) {
-        setTimeout(() => {
-          viewer.current?.resize();
-        }, 100);
-      }
-    };
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // Press 'F' or 'f' to toggle fullscreen
-      if (e.key === "f" || e.key === "F") {
-        if (containerDiv.current?.contains(document.activeElement)) {
-          e.preventDefault();
-          toggleFullscreen();
-        }
-      }
-      // Press Escape to exit fullscreen
-      if (e.key === "Escape" && isFullscreen) {
-        document.exitFullscreen();
-      }
-    };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    document.addEventListener("keydown", handleKeyPress);
 
     return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      document.removeEventListener("keydown", handleKeyPress);
+      viewer.current?.destroy();
+      viewer.current = null;
     };
-  }, [isFullscreen, toggleFullscreen]);
+  }, []);
 
   // Fly camera when coordinates change
   useEffect(() => {
     if (flyToCoords && viewer.current) {
       viewer.current.camera.flyTo({
-        destination: Cartesian3.fromDegrees(
-          flyToCoords.lon,
-          flyToCoords.lat,
-          2000000
-        ),
+        destination: Cartesian3.fromDegrees(flyToCoords.lon, flyToCoords.lat, 2.0e6),
         duration: 3,
       });
     }
   }, [flyToCoords]);
 
-  const addSampleLocations = (cesiumViewer: Viewer) => {
-    // Add NASA locations
-    const locations = [
+  const addSampleLocations = (v: Viewer) => {
+    const locs = [
       { name: "NASA Goddard Space Flight Center", lat: 38.9964, lon: -76.8479 },
-      { name: "NASA Kennedy Space Center", lat: 28.5721, lon: -80.648 },
-      { name: "NASA Johnson Space Center", lat: 29.5591, lon: -95.0907 },
-      { name: "NASA Jet Propulsion Laboratory", lat: 34.2048, lon: -118.1711 },
+      { name: "NASA Kennedy Space Center",        lat: 28.5721, lon: -80.6480 },
+      { name: "NASA Johnson Space Center",        lat: 29.5591, lon: -95.0907 },
+      { name: "NASA JPL",                         lat: 34.2048, lon: -118.1711 },
     ];
-
-    locations.forEach((location) => {
-      cesiumViewer.entities.add(
-        new Entity({
-          name: location.name,
-          position: Cartesian3.fromDegrees(location.lon, location.lat),
-          point: {
-            pixelSize: 10,
-            color: Color.YELLOW,
-            outlineColor: Color.BLACK,
-            outlineWidth: 2,
-            heightReference: 0, // CLAMP_TO_GROUND
-          },
-          label: {
-            text: location.name,
-            font: "12pt Arial",
-            fillColor: Color.WHITE,
-            outlineColor: Color.BLACK,
-            outlineWidth: 2,
-            pixelOffset: new Cartesian3(0, -40, 0),
-            showBackground: true,
-            backgroundColor: Color.BLACK.withAlpha(0.7),
-          },
-        })
-      );
+    locs.forEach((p) => {
+      v.entities.add(new Entity({
+        name: p.name,
+        position: Cartesian3.fromDegrees(p.lon, p.lat),
+        point: { pixelSize: 10, color: Color.YELLOW, outlineColor: Color.BLACK, outlineWidth: 2 },
+        label: {
+          text: p.name,
+          font: "12pt Arial",
+          fillColor: Color.WHITE,
+          outlineColor: Color.BLACK,
+          outlineWidth: 2,
+          pixelOffset: new Cartesian2(0, -40),
+          showBackground: true,
+          backgroundColor: Color.BLACK.withAlpha(0.7),
+        },
+      }));
     });
   };
 
+  // Fullscreen handlers
+  const toggleFullscreen = useCallback(async () => {
+    if (!containerDiv.current) return;
+    if (!document.fullscreenElement) await containerDiv.current.requestFullscreen();
+    else await document.exitFullscreen();
+  }, []);
+
+  useEffect(() => {
+    const onFSChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      viewer.current?.resize();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === "f" || e.key === "F") && containerDiv.current?.contains(document.activeElement)) {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+      if (e.key === "Escape" && document.fullscreenElement) document.exitFullscreen();
+    };
+    document.addEventListener("fullscreenchange", onFSChange);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFSChange);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [toggleFullscreen]);
+
+  const applySurface = () => {
+    if (!viewer.current) return;
+    const meta = LAYERS.find(l => l.id === layerId)!;
+    applyGibsBaseLayer(viewer.current, layerId, dateStr, meta.format);
+  };
+
   return (
-    <div 
-      ref={containerDiv}
-      className="relative"
-      style={{ width, height }}
-    >
+    <div ref={containerDiv} className="relative" style={{ width, height }}>
+      {/* Surface control panel */}
+      <div
+        className="absolute right-2 top-2 z-10 rounded-md border border-gray-300 bg-white/90 p-3 text-sm shadow"
+        style={{ maxWidth: 360 }}
+      >
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>GIBS Surface (EPSG:3857)</div>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          <label>
+            Layer
+            <select
+              value={layerId}
+              onChange={(e) => setLayerId(e.target.value)}
+              style={{ width: "100%" }}
+            >
+              {LAYERS.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Time
+            <div style={{ display: "flex", gap: 6 }}>
+              <select
+                value={dateStr === "default" ? "default" : "custom"}
+                onChange={(e) =>
+                  setDateStr(e.target.value === "default" ? "default" : new Date().toISOString().slice(0, 10))
+                }
+              >
+                <option value="default">default (latest)</option>
+                <option value="custom">custom date</option>
+              </select>
+              <input
+                type="date"
+                value={dateStr === "default" ? "" : dateStr}
+                onChange={(e) => setDateStr(e.target.value || "default")}
+                disabled={dateStr === "default"}
+              />
+            </div>
+          </label>
+
+          <button onClick={applySurface} style={{ padding: "6px 10px" }}>
+            Apply
+          </button>
+        </div>
+      </div>
+
       {/* Fullscreen Button */}
       <button
         onClick={toggleFullscreen}
         className="absolute left-2 top-2 z-10 rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
-        title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enter Fullscreen (F)'}
+        title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen (F)"}
       >
         {isFullscreen ? (
-          // Exit fullscreen icon
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         ) : (
-          // Enter fullscreen icon
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
           </svg>
         )}
       </button>
@@ -181,9 +268,7 @@ const Globe: React.FC<GlobeProps> = ({
       {/* Cesium Container */}
       <div
         ref={cesiumContainer}
-        className={`overflow-hidden rounded-lg ${
-          isFullscreen ? 'h-screen w-screen' : 'border border-gray-300'
-        }`}
+        className={`overflow-hidden rounded-lg ${isFullscreen ? "h-screen w-screen" : "border border-gray-300"}`}
         style={isFullscreen ? {} : { width, height }}
       />
     </div>
