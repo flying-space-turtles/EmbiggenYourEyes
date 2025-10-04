@@ -361,6 +361,11 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           console.log('🫥 Hiding sun');
           sunEntity.show = false;
 
+          // Start Globe mounting early for smoother transition
+          setTimeout(() => {
+            setIsGlobeView(true);
+          }, 1300);
+
           // Zoom very close to Earth with smoother animation
           viewer.camera.flyTo({
             destination: new Cesium.Cartesian3(
@@ -378,11 +383,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
               up: Cesium.Cartesian3.UNIT_Z
             },
             duration: 1.5,
-            easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
-            complete: () => {
-              // Immediate switch to Globe view for seamless transition
-              setIsGlobeView(true);
-            }
+            easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT
           });
         }
       }
