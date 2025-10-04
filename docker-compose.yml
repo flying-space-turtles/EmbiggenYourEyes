@@ -24,8 +24,8 @@ services:
       - db
     volumes:
       - ./backend:/app  # for development. Remove in production to use only image
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"  # Expose Django backend to localhost for development
     networks:
       - webnet
 
