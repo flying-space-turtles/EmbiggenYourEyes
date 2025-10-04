@@ -14,13 +14,6 @@ const GlobePage: React.FC = () => {
           🌍 NASA Space Visualization
         </h1>
       </div>
-      
-      {/* Search box overlay */}
-      <div className="absolute right-20 top-4 z-20">
-        <SearchBox 
-          onResult={(data: FlyToCoords) => setCoords(data)} 
-        />
-      </div>
 
       {/* Fullscreen Globe */}
       <Globe 
