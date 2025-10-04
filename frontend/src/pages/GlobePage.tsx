@@ -4,7 +4,7 @@ import Globe from '../components/Globe';
 const GlobePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100 p-5">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <h1 className="mb-5 text-center text-4xl font-bold text-gray-800">
           🌍 NASA Space Visualization
         </h1>
@@ -14,7 +14,7 @@ const GlobePage: React.FC = () => {
         </p>
 
         <div className="rounded-xl bg-white p-5 shadow-lg">
-          <Globe height="600px" />
+          <Globe height="800px" />
         </div>
 
         <div className="mt-5 rounded-xl bg-white p-5 shadow-lg">
@@ -25,6 +25,7 @@ const GlobePage: React.FC = () => {
             <li>🔍 Mouse controls: Left-click and drag to rotate, scroll to zoom</li>
             <li>🏠 Home button to reset view</li>
             <li>📍 Click on markers to see facility information</li>
+            <li>🖥️ Press 'F' for fullscreen mode, 'Esc' to exit</li>
           </ul>
         </div>
       </div>
