@@ -1,0 +1,250 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Cesium Solar System (Compact) — Right-drag Pan</title>
+  <script>window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium/Build/Cesium';</script>
+  <link href="https://cdn.jsdelivr.net/npm/cesium/Build/Cesium/Widgets/widgets.css" rel="stylesheet"/>
+  <style>
+    html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; }
+    #ui {
+      position:absolute; left:12px; top:12px; z-index:1000;
+      background: rgba(255,255,255,0.9); padding:10px; border-radius:6px;
+      font-family: sans-serif; font-size:13px;
+    }
+    #controls {
+      position:absolute; right:12px; top:12px; z-index:1000;
+      background: rgba(255,255,255,0.9); padding:10px; border-radius:6px;
+      font-family:sans-serif; font-size:12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="ui">
+    <button id="resetView">Reset View</button>
+    <span id="status" style="margin-left:8px">Status: ready</span>
+  </div>
+
+  <div id="controls">
+    <strong>Camera Controls:</strong><br>
+    Left Click + Drag: Rotate<br>
+    Right Click + Drag: Pan<br>
+    Mouse Wheel: Zoom<br>
+    Middle Click + Drag: Look Around<br>
+    Double-Click: Focus on Objects
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/cesium/Build/Cesium/Cesium.js"></script>
+  <script>
+    if (!window.Cesium) {
+      document.getElementById('status').textContent = 'Status: Cesium failed to load (check console).';
+      throw new Error('Cesium not loaded');
+    }
+
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      timeline: false,
+      animation: false,
+      infoBox: false,
+      selectionIndicator: false,
+      baseLayerPicker: false,
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      imageryProvider: false
+    });
+
+    viewer.scene.globe.show = false;
+    viewer.scene.backgroundColor = Cesium.Color.BLACK;
+
+    // Robustly prevent browser context menu on the Cesium canvas (mandatory for right-drag behavior)
+    const canvas = viewer.cesiumWidget.canvas;
+    canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); }, { passive: false });
+
+    // Ensure camera controller allows translate and use RIGHT_DRAG for panning
+    viewer.scene.screenSpaceCameraController.enableRotate = true;
+    viewer.scene.screenSpaceCameraController.enableTranslate = true;
+    viewer.scene.screenSpaceCameraController.enableZoom = true;
+    viewer.scene.screenSpaceCameraController.enableTilt = true;
+    viewer.scene.screenSpaceCameraController.enableLook = true;
+
+    // Use RIGHT_DRAG for translate/pan in 3D
+    viewer.scene.screenSpaceCameraController.translateEventTypes = Cesium.CameraEventType.RIGHT_DRAG;
+
+    // Keep rotate and look mappings explicit
+    viewer.scene.screenSpaceCameraController.rotateEventTypes = Cesium.CameraEventType.LEFT_DRAG;
+    viewer.scene.screenSpaceCameraController.lookEventTypes = Cesium.CameraEventType.MIDDLE_DRAG;
+    viewer.scene.screenSpaceCameraController.zoomEventTypes = [Cesium.CameraEventType.WHEEL, Cesium.CameraEventType.PINCH];
+
+    // Adjust camera movement sensitivity (tweak to taste)
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1000;
+    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000;
+
+    // Debug output
+    console.log('Camera controller settings:', {
+      enableTranslate: viewer.scene.screenSpaceCameraController.enableTranslate,
+      translateEventTypes: viewer.scene.screenSpaceCameraController.translateEventTypes,
+      enableRotate: viewer.scene.screenSpaceCameraController.enableRotate,
+      rotateEventTypes: viewer.scene.screenSpaceCameraController.rotateEventTypes
+    });
+
+    document.getElementById('status').textContent = 'Status: viewer ready';
+
+    // Sun
+    const sunEntity = viewer.entities.add({
+      name: 'Sun',
+      position: Cesium.Cartesian3.fromElements(0, 0, 0),
+      ellipsoid: {
+        radii: new Cesium.Cartesian3(500000, 500000, 500000),
+        material: Cesium.Color.ORANGE
+      }
+    });
+
+    // Planet definitions (scaled distances + radii)
+    const planets = [
+      { name: 'Mercury', color: Cesium.Color.GRAY,   distance: 1e6,  radius: 50000 },
+      { name: 'Venus',   color: Cesium.Color.BEIGE,  distance: 2e6,  radius: 120000 },
+      { name: 'Earth',   color: Cesium.Color.BLUE,   distance: 3e6,  radius: 127000 },
+      { name: 'Mars',    color: Cesium.Color.RED,    distance: 4e6,  radius: 70000 },
+      { name: 'Jupiter', color: Cesium.Color.SANDYBROWN, distance: 6e6, radius: 400000 },
+      { name: 'Saturn',  color: Cesium.Color.GOLD,   distance: 8e6,  radius: 350000 },
+      { name: 'Uranus',  color: Cesium.Color.CYAN,   distance: 10e6, radius: 250000 },
+      { name: 'Neptune', color: Cesium.Color.DEEPSKYBLUE, distance: 12e6, radius: 240000 }
+    ];
+
+    // Add planets
+    planets.forEach((p) => {
+      p.entity = viewer.entities.add({
+        name: p.name,
+        position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+          material: p.color
+        }
+      });
+    });
+
+    // Planet visualization state
+    let currentPlanetView = null;
+    let isInFocusMode = false;
+
+    // Camera setup
+    function enableFreeMovement() {
+      viewer.scene.screenSpaceCameraController.enableRotate = true;
+      viewer.scene.screenSpaceCameraController.enableTranslate = true;
+      viewer.scene.screenSpaceCameraController.enableZoom = true;
+      viewer.scene.screenSpaceCameraController.enableTilt = true;
+      viewer.scene.screenSpaceCameraController.enableLook = true;
+    }
+
+    function resetCamera() {
+      viewer.camera.flyTo({
+        destination: new Cesium.Cartesian3(15e6, 0, 8e6),
+        duration: 1.5,
+        complete: function() {
+          enableFreeMovement();
+        }
+      });
+      currentPlanetView = null;
+      isInFocusMode = false;
+      document.getElementById('status').textContent = 'Status: Solar System View';
+    }
+
+    function focusOnObject(position, radius, name) {
+      isInFocusMode = true;
+      const cameraDistance = radius * 4;
+      viewer.camera.flyTo({
+        destination: new Cesium.Cartesian3(
+          position.x + cameraDistance,
+          position.y + cameraDistance * 0.3,
+          position.z + cameraDistance * 0.5
+        ),
+        duration: 2.0,
+        complete() { enableFreeMovement(); }
+      });
+      document.getElementById('status').textContent = `Status: Focused on ${name} (double-click to exit or move freely)`;
+    }
+
+    resetCamera();
+
+    // Double-click handler for planet visualization
+    viewer.cesiumWidget.canvas.addEventListener('dblclick', function(event) {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const pickedObject = viewer.scene.pick({ x, y });
+
+      if (pickedObject && pickedObject.id) {
+        const entity = pickedObject.id;
+        if (currentPlanetView) { resetCamera(); return; }
+
+        const planet = planets.find(p => p.name === entity.name);
+        if (planet) {
+          currentPlanetView = planet;
+          const planetPosition = entity.position.getValue(viewer.clock.currentTime);
+          focusOnObject(planetPosition, planet.radius, planet.name);
+        } else if (entity.name === 'Sun') {
+          currentPlanetView = { name: 'Sun', radius: 500000 };
+          const sunPosition = entity.position.getValue(viewer.clock.currentTime);
+          focusOnObject(sunPosition, 500000, 'Sun');
+        }
+      } else {
+        if (currentPlanetView) resetCamera();
+      }
+    });
+
+    // Hover effects for visual feedback
+    viewer.cesiumWidget.canvas.addEventListener('mousemove', function(event) {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const pickedObject = viewer.scene.pick({ x, y });
+
+      if (pickedObject && pickedObject.id) {
+        const entity = pickedObject.id;
+        const isPlanet = planets.some(p => p.name === entity.name) || entity.name === 'Sun';
+        if (isPlanet) {
+          viewer.canvas.style.cursor = 'pointer';
+          if (!currentPlanetView) document.getElementById('status').textContent = `Status: Double-click to focus on ${entity.name}`;
+        } else {
+          viewer.canvas.style.cursor = 'default';
+        }
+      } else {
+        viewer.canvas.style.cursor = 'default';
+        if (!currentPlanetView && !isInFocusMode) document.getElementById('status').textContent = 'Status: ready';
+      }
+    });
+
+    // Reset button
+    document.getElementById('resetView').onclick = resetCamera;
+
+    // Keyboard controls
+    document.addEventListener('keydown', function(event) {
+      const camera = viewer.scene.camera;
+      const moveAmount = 100000;
+      switch(event.code) {
+        case 'KeyW': camera.moveForward(moveAmount); break;
+        case 'KeyS': camera.moveBackward(moveAmount); break;
+        case 'KeyA': camera.moveLeft(moveAmount); break;
+        case 'KeyD': camera.moveRight(moveAmount); break;
+        case 'KeyQ': camera.moveUp(moveAmount); break;
+        case 'KeyE': camera.moveDown(moveAmount); break;
+        case 'Space': resetCamera(); break;
+      }
+    });
+
+    // Auto-hide controls
+    setTimeout(function() {
+      const controlsPanel = document.getElementById('controls');
+      if (controlsPanel) {
+        controlsPanel.style.opacity = '0.3';
+        controlsPanel.style.transition = 'opacity 0.5s';
+      }
+    }, 10000);
+    document.getElementById('controls').addEventListener('mouseenter', function() { this.style.opacity = '1'; });
+    document.getElementById('controls').addEventListener('mouseleave', function() { this.style.opacity = '0.3'; });
+
+  </script>
+</body>
+</html>
