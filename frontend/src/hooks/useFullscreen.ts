@@ -3,7 +3,7 @@ import { Viewer } from 'cesium';
 
 interface UseFullscreenProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
-viewer: React.RefObject<Viewer>;
+  viewer: React.RefObject<Viewer | null>;
   isFullscreen: boolean;
   setIsFullscreen: (fullscreen: boolean) => void;
 }
