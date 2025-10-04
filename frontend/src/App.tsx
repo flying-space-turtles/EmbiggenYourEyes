@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Home from './pages/Home'
 import GlobePage from './pages/GlobePage'
+import SolarSystemPage from './pages/SolarSystemPage'
 
 function NavBar() {
   return (
@@ -13,6 +14,12 @@ function NavBar() {
             className="rounded px-4 py-2 text-white no-underline transition-colors hover:bg-gray-700"
           >
             Home
+          </Link>
+          <Link 
+            to="/solar-system" 
+            className="rounded px-4 py-2 text-white no-underline transition-colors hover:bg-gray-700"
+          >
+            🪐 Solar System
           </Link>
           <Link 
             to="/globe" 
@@ -28,14 +35,15 @@ function NavBar() {
 
 function AppContent() {
   const location = useLocation();
-  const isGlobePage = location.pathname === '/globe';
+  const isFullscreenPage = location.pathname === '/globe' || location.pathname === '/solar-system';
 
   return (
-    <div className={isGlobePage ? "" : "min-h-screen bg-gray-900"}>
-      {!isGlobePage && <NavBar />}
+    <div className={isFullscreenPage ? "" : "min-h-screen bg-gray-900"}>
+      {!isFullscreenPage && <NavBar />}
       
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/solar-system" element={<SolarSystemPage />} />
         <Route path="/globe" element={<GlobePage />} />
       </Routes>
     </div>
