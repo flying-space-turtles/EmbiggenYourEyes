@@ -151,7 +151,6 @@ function Home() {
             </p>
             <ul className="list-disc pl-6 space-y-1">
               <li>🪐 <strong className="text-purple-600">Solar System</strong> - Explore our solar system and double-click Earth to zoom in!</li>
-              <li>🌍 <strong className="text-blue-600">Globe</strong> - Interactive Earth with NASA facilities and search functionality</li>
             </ul>
           </div>
         </div>

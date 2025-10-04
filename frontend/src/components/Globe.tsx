@@ -6,12 +6,15 @@ import SearchBox from './SearchBox';
 import { useCesiumViewer } from '../hooks/useCesiumViewer';
 import { useScreenshot } from '../hooks/useScreenshot';
 import { useFlyToCoords } from '../hooks/useFlyToCoords';
+import { type FlyToCoords } from "../types/FlyToCoords";
+
 
 interface GlobeProps {
   width?: string;
   height?: string;
-  flyToCoords?: { lat: number; lon: number } | null;
+  flyToCoords?: FlyToCoords | null; 
 }
+
 
 const Globe: React.FC<GlobeProps> = ({
   width = "100%",
@@ -23,7 +26,7 @@ const Globe: React.FC<GlobeProps> = ({
   const viewer = useRef<Viewer | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
-  const [searchCoords, setSearchCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
 
   useCesiumViewer({ containerRef: cesiumContainer, viewer });
   useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
@@ -43,8 +46,8 @@ const Globe: React.FC<GlobeProps> = ({
     closeScreenshotModal(screenshotUrl);
   };
 
-  const handleSearchResult = (data: { lat: number; lon: number; name: string }) => {
-    setSearchCoords({ lat: data.lat, lon: data.lon });
+  const handleSearchResult = (data: FlyToCoords) => {
+    setSearchCoords(data);
   };
 
   return (

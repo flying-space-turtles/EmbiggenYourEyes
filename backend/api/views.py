@@ -20,6 +20,10 @@ class MessageViewSet(viewsets.ModelViewSet):
 def hello_api():
     return Response({"message": "Hello from DRF!"})
 
+from django.http import JsonResponse
+from rest_framework.decorators import api_view
+import requests
+
 @api_view(['GET'])
 def geocode_search(request):
     query = request.GET.get("q")
@@ -27,8 +31,8 @@ def geocode_search(request):
         return JsonResponse({"error": "Missing query parameter 'q'."}, status=400)
 
     # Call Nominatim API
-    url = f"https://nominatim.openstreetmap.org/search"
-    params = {"format": "json", "q": query}
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {"format": "json", "q": query, "limit": 5}  # limit to 5 results
     headers = {"User-Agent": "django-geocoder"}
 
     response = requests.get(url, params=params, headers=headers)
@@ -37,10 +41,21 @@ def geocode_search(request):
     if not data:
         return JsonResponse({"error": "Location not found."}, status=404)
 
-    result = {
-        "name": data[0]["display_name"],
-        "lat": float(data[0]["lat"]),
-        "lon": float(data[0]["lon"]),
-    }
-    return JsonResponse(result)
+    results = []
+    for item in data:
+        bbox = [float(coord) for coord in item["boundingbox"]]  # [south, north, west, east]
+        results.append({
+            "name": item["display_name"],
+            "lat": float(item["lat"]),
+            "lon": float(item["lon"]),
+            "boundingbox": {
+                "south": bbox[0],
+                "north": bbox[1],
+                "west": bbox[2],
+                "east": bbox[3]
+            }
+        })
+
+    return JsonResponse({"results": results})
+
 
