@@ -9,7 +9,12 @@ import { useFlyToCoords } from '../hooks/useFlyToCoords';
 interface GlobeProps {
   width?: string;
   height?: string;
-  flyToCoords?: { lat: number; lon: number } | null;
+  flyToCoords?: { lat: number; lon: number; boundingbox: {
+    south: number;
+    north: number;
+    west: number;
+    east: number;
+  }; } | null;
 }
 
 const Globe: React.FC<GlobeProps> = ({
