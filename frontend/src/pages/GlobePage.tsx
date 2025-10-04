@@ -26,6 +26,7 @@ const GlobePage: React.FC = () => {
             <li>🏠 Home button to reset view</li>
             <li>📍 Click on markers to see facility information</li>
             <li>🖥️ Press 'F' for fullscreen mode, 'Esc' to exit</li>
+            <li>📸 Take screenshots of the current view for sharing</li>
           </ul>
         </div>
       </div>
