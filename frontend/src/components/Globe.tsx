@@ -157,7 +157,7 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
       {/* Fullscreen Button */}
       <button
         onClick={toggleFullscreen}
-        className="absolute -2 top-2 z-10 rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+        className="absolute left-2 top-2 z-10 rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
         title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enter Fullscreen (F)'}
       >
         {isFullscreen ? (
