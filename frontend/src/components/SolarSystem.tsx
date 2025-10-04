@@ -43,7 +43,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       if (viewerRef.current) {
         const viewer = viewerRef.current;        
         // Show all entities in the viewer (planets, sun, rings)
-        viewer.entities.values.forEach((entity, index) => {
+        viewer.entities.values.forEach((entity) => {
           entity.show = true;
         });
         
