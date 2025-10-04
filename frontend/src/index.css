@@ -9,3 +9,23 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Cesium navigation toolbar positioning */
+.cesium-viewer-toolbar {
+  bottom: 10px !important;
+  right: 10px !important;
+  top: auto !important;
+  left: auto !important;
+}
+
+/* Ensure the home button and other navigation controls are positioned correctly */
+.cesium-navigation-help-button,
+.cesium-home-button {
+  background-color: rgba(42, 42, 42, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.cesium-navigation-help-button:hover,
+.cesium-home-button:hover {
+  background-color: rgba(42, 42, 42, 0.9) !important;
+}
