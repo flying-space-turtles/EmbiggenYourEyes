@@ -47,7 +47,6 @@ const Globe: React.FC<GlobeProps> = ({
       className="relative"
       style={{ width, height }}
     >
-      {/* Screenshot Button */}
       <div className="absolute right-4 top-4 z-10">
         <button
           onClick={takeScreenshot}
