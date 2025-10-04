@@ -163,5 +163,6 @@ export const useScreenshot = ({
     takeScreenshot,
     downloadScreenshot,
     closeScreenshotModal,
+    waitForImageryToLoad, // Export for use by comparison hook
   };
 };

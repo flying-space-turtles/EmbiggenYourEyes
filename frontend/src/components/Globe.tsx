@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
+import ComparisonModal from "./ComparisonModal";
 import SearchBox from "./SearchBox";
 import { useScreenshot } from "../hooks/useScreenshot";
+import { useComparisonScreenshot } from "../hooks/useComparisonScreenshot";
 import { useFlyToCoords } from "../hooks/useFlyToCoords";
 import { type FlyToCoords } from "../types/FlyToCoords";
 import { addSampleLocations } from "../utils/cesiumHelpers";
@@ -101,7 +103,7 @@ const Globe: React.FC<GlobeProps> = ({
   // Get current layer format for screenshots
   const currentFormat = LAYERS.find(l => l.id === layerId)?.format || "jpg";
   
-  const { takeScreenshot, downloadScreenshot, closeScreenshotModal } = useScreenshot({
+  const { takeScreenshot, downloadScreenshot, closeScreenshotModal, waitForImageryToLoad } = useScreenshot({
       viewer,
       setScreenshotUrl,
       setShowScreenshotModal,
@@ -110,6 +112,22 @@ const Globe: React.FC<GlobeProps> = ({
       currentFormat,
       currentDateStr: dateStr,
     });
+
+  // Comparison screenshot functionality
+  const {
+    comparisonImages,
+    showComparisonModal,
+    takeComparisonScreenshots,
+    downloadComparisonImages,
+    closeComparisonModal,
+  } = useComparisonScreenshot({
+    viewer,
+    applyGibsOverlay,
+    currentLayerId: layerId,
+    currentFormat,
+    currentDateStr: dateStr,
+    waitForImageryToLoad,
+  });
 
   const handleDownloadScreenshot = () => {
     if (screenshotUrl) {
@@ -131,6 +149,28 @@ const Globe: React.FC<GlobeProps> = ({
 
   const handleRetakeWithDate = async (date: string) => {
     await takeScreenshot(date);
+  };
+
+  const handleComparisonScreenshot = () => {
+    // Default to current date and a date one year ago
+    const currentDate = new Date().toISOString().slice(0, 10);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const beforeDate = oneYearAgo.toISOString().slice(0, 10);
+    
+    takeComparisonScreenshots(beforeDate, currentDate);
+  };
+
+  const handleRetakeComparisonImages = async (beforeDate: string, afterDate: string) => {
+    await takeComparisonScreenshots(beforeDate, afterDate);
+  };
+
+  const handleDownloadComparison = () => {
+    downloadComparisonImages();
+  };
+
+  const handleCloseComparisonModal = () => {
+    closeComparisonModal();
   };
 
   useEffect(() => {
@@ -220,6 +260,25 @@ const Globe: React.FC<GlobeProps> = ({
               />
             </svg>
           </button>
+          <button
+            onClick={handleComparisonScreenshot}
+            className="rounded-lg bg-purple-600/90 p-2 text-white transition-all hover:bg-purple-700/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+            title="Take Before/After Comparison"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8V4a1 1 0 011-1h4M20 8V4a1 1 0 00-1-1h-4M4 16v4a1 1 0 001 1h4M20 16v4a1 1 0 01-1 1h-4M9 12h6M12 9l3 3-3 3"
+              />
+            </svg>
+          </button>
         </div>
         <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
           GIBS Surface (EPSG:3857)
@@ -289,6 +348,18 @@ const Globe: React.FC<GlobeProps> = ({
         onClose={handleCloseScreenshotModal}
         onDownload={handleDownloadScreenshot}
         onRetakeWithDate={handleRetakeWithDate}
+      />
+
+      {/* Comparison Modal */}
+      <ComparisonModal
+        isOpen={showComparisonModal}
+        beforeImage={comparisonImages?.beforeImage || null}
+        afterImage={comparisonImages?.afterImage || null}
+        beforeDate={comparisonImages?.beforeDate || ''}
+        afterDate={comparisonImages?.afterDate || ''}
+        onClose={handleCloseComparisonModal}
+        onDownload={handleDownloadComparison}
+        onRetakeImages={handleRetakeComparisonImages}
       />
     </div>
   );
