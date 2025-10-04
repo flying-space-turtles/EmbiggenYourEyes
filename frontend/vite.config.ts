@@ -1,7 +1,26 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react-swc'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import cesium from "vite-plugin-cesium";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
-})
+  plugins: [react(), cesium(), tailwindcss()],
+  envDir: "../", // Look for .env files in the project root
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/admin": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/static": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
+});

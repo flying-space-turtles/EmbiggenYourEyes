@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  # Frontend runs locally via `npm run dev` at http://localhost:5173
+  # This file contains development-specific overrides for backend services
+  
+  web:
+    environment:
+      - DJANGO_DEBUG=True
+      - DJANGO_LOG_LEVEL=DEBUG
+    # Volume is already mounted in base compose for hot reload
