@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Globe from '../components/Globe';
+import SearchBox from "../components/SearchBox";
 
 const GlobePage: React.FC = () => {
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+
   return (
     <div className="min-h-screen bg-gray-100 p-5">
       <div className="mx-auto max-w-7xl">
@@ -9,9 +12,13 @@ const GlobePage: React.FC = () => {
           🌍 NASA Space Visualization
         </h1>
         
-        <p className="mb-8 text-center text-lg text-gray-600">
+        <p style={{ textAlign: 'center', marginBottom: '30px', color: '#666', fontSize: '1.1rem' }}>
           Explore NASA facilities and space missions around the globe using CesiumJS
         </p>
+        
+        {/* Pass callback to receive search coordinates */}
+        <SearchBox onResult={(data) => setCoords({ lat: data.lat, lon: data.lon })} />
+
 
         <div className="rounded-xl bg-white p-5 shadow-lg">
           <Globe height="800px" />

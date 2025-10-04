@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { Viewer } from 'cesium';
+import React, { useEffect, useRef, useState } from 'react';
+import { Cartesian3, Viewer } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import ControlButtons from './ControlButtons';
 import ScreenshotModal from './ScreenshotModal';
@@ -10,12 +10,17 @@ import { useScreenshot } from '../hooks/useScreenshot';
 interface GlobeProps {
   width?: string;
   height?: string;
+  flyToCoords?: { lat: number; lon: number } | null;
 }
 
-const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
+const Globe: React.FC<GlobeProps> = ({
+  width = "100%",
+  height = "500px",
+  flyToCoords,
+}) => {
   const cesiumContainer = useRef<HTMLDivElement>(null);
-  const viewer = useRef<Viewer | null>(null);
   const containerDiv = useRef<HTMLDivElement>(null);
+  const viewer = useRef<Viewer | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
@@ -49,6 +54,20 @@ const Globe: React.FC<GlobeProps> = ({ width = '100%', height = '500px' }) => {
   const handleCloseScreenshotModal = () => {
     closeScreenshotModal(screenshotUrl);
   };
+
+  // Fly camera when coordinates change
+  useEffect(() => {
+    if (flyToCoords && viewer.current) {
+      viewer.current.camera.flyTo({
+        destination: Cartesian3.fromDegrees(
+          flyToCoords.lon,
+          flyToCoords.lat,
+          2000000
+        ),
+        duration: 3,
+      });
+    }
+  }, [flyToCoords]);
 
   return (
     <div 
