@@ -15,7 +15,6 @@ class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
 
-
 @api_view(['GET'])
 def hello_api():
     return Response({"message": "Hello from DRF!"})
@@ -59,3 +58,25 @@ def geocode_search(request):
     return JsonResponse({"results": results})
 
 
+@api_view(["GET"])
+def get_region(request):
+    lat = request.GET.get("lat")
+    lon = request.GET.get("lon")
+
+    if lat is None or lon is None:
+        return Response({"error": "Missing lat or lon"}, status=400)
+
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"format": "json", "lat": lat, "lon": lon},
+            headers={"User-Agent": "django-geocoder"}
+        )
+        r.raise_for_status()
+        data = r.json()
+        display_name = data.get("display_name", f"{lat}, {lon}")
+        return Response({"region": display_name})
+    except requests.exceptions.RequestException as e:
+        return Response({"error": str(e)}, status=500)
+    except ValueError:
+        return Response({"error": "Invalid JSON from Nominatim", "raw": r.text}, status=500)
