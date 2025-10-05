@@ -367,10 +367,12 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       });
     }
 
-    // Create celestial bodies array for navigation
+    // Create celestial bodies array for navigation - ordered properly with Moon between Earth and Mars
     const celestialBodies = [
       { name: 'Sun', entity: sunEntity, radius: 696340 },
-      ...planetEntities
+      ...planetEntities.filter(p => ['Mercury', 'Venus', 'Earth'].includes(p.name)),
+      ...planetEntities.filter(p => p.name === 'Moon'),
+      ...planetEntities.filter(p => ['Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'].includes(p.name))
     ];
 
     let currentPlanetIndex = -1;
