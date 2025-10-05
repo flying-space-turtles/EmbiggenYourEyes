@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # copy and install pip deps
-COPY ./requirements.txt /app/
+COPY ./backend/requirements.txt /app/
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install -r ./backend/requirements.txt
 
 # copy project
 COPY . /app
