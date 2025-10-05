@@ -10,7 +10,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Secret from env
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-secret-for-dev")
 
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
+#DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
+DEBUG = False
 
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost 127.0.0.1 0.0.0.0").split()
 
@@ -110,7 +111,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React dev server
     "http://localhost:80",    # Production
     "http://localhost:8000",
-    "http://127.0.0.1:80"
+    "http://127.0.0.1:80",
+    "https://info-pro.ro/"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
