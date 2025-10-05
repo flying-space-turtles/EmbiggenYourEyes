@@ -520,10 +520,6 @@ const Globe: React.FC<GlobeProps> = ({
             Apply
           </button>
 
-        <div className="text-xs opacity-70 mt-2">
-          Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
-        </div>
-
         {viewportBounds && (
           <div className="text-xs text-white mt-2 bg-black/60 px-2 py-1 rounded">
             Viewport Center: {getViewportCenter(viewportBounds).lat.toFixed(3)}°, {getViewportCenter(viewportBounds).lon.toFixed(3)}°
