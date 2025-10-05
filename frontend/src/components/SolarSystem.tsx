@@ -368,7 +368,15 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           ),
           up: Cesium.Cartesian3.UNIT_Z
         },
-        duration: 2.0
+        duration: 2.0,
+        complete: () => {
+          // Set the camera's reference frame to look at the planet center
+          // This ensures rotation happens around the planet
+          viewer.camera.lookAtTransform(
+            Cesium.Transforms.eastNorthUpToFixedFrame(position),
+            new Cesium.Cartesian3(0.0, 0.0, cameraDistance)
+          );
+        }
       });
     };
 
@@ -401,6 +409,9 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     };
 
     const resetToSystemView = () => {
+      // Clear any camera transform first
+      viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+      
       // Show all planets and the sun again
       planetEntities.forEach(planet => {
         planet.entity.show = true;
