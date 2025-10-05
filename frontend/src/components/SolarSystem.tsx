@@ -34,9 +34,17 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
 }) => {
   const cesiumContainer = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ExtendedViewer | null>(null);
+  const toggleOrbitModeRef = useRef<(() => void) | null>(null); // ADD THIS LINE
   const navigate = useNavigate();
   const [isGlobeView, setIsGlobeView] = useState(false);
   const [isMarsView, setIsMarsView] = useState(false);
+  const [isOrbitingEnabled, setIsOrbitingEnabled] = useState(false); // Default to non-movement
+
+  const handleToggleOrbit = () => {
+    const newOrbitState = !isOrbitingEnabled;
+    setIsOrbitingEnabled(newOrbitState);
+    console.log('🔄 Orbit mode toggled to:', newOrbitState);
+  };
 
   const returnToSolarSystem = () => {
     console.log('🚀 Returning to solar system from Mars/Globe...');
@@ -133,7 +141,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 3,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(0, -80), // Position above Sun
+        pixelOffset: new Cesium.Cartesian2(0, -100), // Position above Sun
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         scale: 1.0,
@@ -153,10 +161,20 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       { name: 'Neptune', color: Cesium.Color.DEEPSKYBLUE, distance: 12e6, radius: 240000 }
     ];
 
+    const canvas = viewer.cesiumWidget.canvas;
+    const simEpoch = Cesium.JulianDate.fromDate(new Date()); 
+
+    let cbCalls = 0;
+    setInterval(() => { console.log('callback calls/sec', cbCalls); cbCalls = 0; }, 1000);
+
     // Add planets
     const planetEntities: { name: string; entity: Cesium.Entity; distance: number; radius: number; rings?: Cesium.Entity[] }[] = [];
+    const simulationStartTime = Date.now();
+
+     // Create initial static planets
     planets.forEach((p) => {
       let entity;
+
       if (p.name === 'Earth') {
         entity = viewer.entities.add({
           name: p.name,
@@ -165,7 +183,6 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
             radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
             material: new Cesium.ImageMaterialProperty({
               image: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
-
               transparent: false
             })
           },
@@ -176,101 +193,270 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 2,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            pixelOffset: new Cesium.Cartesian2(0, -50), // Position above planet
+            eyeOffset: new Cesium.Cartesian3(0, 0, -p.radius * 1.5),
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            scale: 0.8,
+            show: true,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        });
+      } else {
+        entity = viewer.entities.add({
+          name: p.name,
+          position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+          ellipsoid: {
+            radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+            material: new Cesium.ImageMaterialProperty({
+              image: `/${p.name.toLowerCase()}_texture.jpg`,
+              transparent: false
+            })
+          },
+          label: {
+            text: p.name,
+            font: '16pt sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -50),
             horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
             verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
             scale: 0.8,
             show: true
-        }
+          }
         });
-      } else {
-        entity = viewer.entities.add({
-        name: p.name,
-        position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
-        ellipsoid: {
-          radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
-          material: new Cesium.ImageMaterialProperty({
-            image: `/${p.name.toLowerCase()}_texture.jpg`,
-            transparent: false
-          })
-        },
-        label: {
-          text: p.name,
-          font: '16pt sans-serif',
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -50), // Position above planet
-          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          scale: 0.8,
-          show: true
-        }
-    });
-  }
-    
+      }
+      
       planetEntities.push({ ...p, entity });
-}); 
+    });
 
+// Function to create static planets (no orbiting)
+// const createStaticPlanets = () => {
+//   planets.forEach((p) => {
+//     let entity;
 
-    // Add Saturn's rings
-    const saturnPlanet = planetEntities.find(p => p.name === 'Saturn');
-    if (saturnPlanet) {
-        const saturnRingPosCallback = (time, result) => {
-            const pos = saturnPlanet.entity.position.getValue(time, result);
-            
-            // Compute Saturn's "up" vector (from origin to center)
-            const up = Cesium.Cartesian3.normalize(pos, new Cesium.Cartesian3());
-            
-            // Move ring slightly above surface along this up vector
-            const offset = saturnPlanet.radius * 10; // 5% above surface
-            return Cesium.Cartesian3.add(pos, Cesium.Cartesian3.multiplyByScalar(up, offset, new Cesium.Cartesian3()), new Cesium.Cartesian3());
-        };
+//     if (p.name === 'Earth') {
+//       entity = viewer.entities.add({
+//         name: p.name,
+//         position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+//         ellipsoid: {
+//           radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+//           material: new Cesium.ImageMaterialProperty({
+//             image: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
+//             transparent: false
+//           })
+//         },
+//         label: {
+//           text: p.name,
+//           font: '16pt sans-serif',
+//           fillColor: Cesium.Color.WHITE,
+//           outlineColor: Cesium.Color.BLACK,
+//           outlineWidth: 2,
+//           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+//           eyeOffset: new Cesium.Cartesian3(0, 0, -p.radius * 1.5),
+//           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+//           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+//           scale: 0.8,
+//           show: true,
+//           disableDepthTestDistance: Number.POSITIVE_INFINITY
+//         }
+//       });
+//     } else {
+//       entity = viewer.entities.add({
+//         name: p.name,
+//         position: Cesium.Cartesian3.fromElements(p.distance, 0, 0), // Static position
+//         ellipsoid: {
+//           radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+//           material: new Cesium.ImageMaterialProperty({
+//             image: `/${p.name.toLowerCase()}_texture.jpg`,
+//             transparent: false
+//           })
+//         },
+//         label: {
+//           text: p.name,
+//           font: '16pt sans-serif',
+//           fillColor: Cesium.Color.WHITE,
+//           outlineColor: Cesium.Color.BLACK,
+//           outlineWidth: 2,
+//           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+//           pixelOffset: new Cesium.Cartesian2(0, -50),
+//           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+//           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+//           scale: 0.8,
+//           show: true
+//         }
+//       });
+//     }
+    
+//     planetEntities.push({ ...p, entity });
+//   });
+// };
 
-        // Orientation for rings
-        const tiltRad = Cesium.Math.toRadians(26.7); // Saturn's axial tilt
-        const ringOrientationCallback = (time, result) => {
-            const pos = saturnPlanet.entity.position.getValue(time);
-            const hpr = new Cesium.HeadingPitchRoll(0, tiltRad, 0);
-            return Cesium.Transforms.headingPitchRollQuaternion(pos, hpr, Cesium.Ellipsoid.WGS84, Cesium.Transforms.eastNorthUpToFixedFrame, result);
-        };
+// // Function to create orbiting planets (with callbacks)
+// const createOrbitingPlanets = () => {
+//   planets.forEach((p, index) => {
+//     // Orbital parameters
+//     const orbitalPeriods = {
+//       'Mercury': 88 / 365.25,    // 88 Earth days
+//       'Venus': 225 / 365.25,     // 225 Earth days  
+//       'Earth': 1.0,              // 1 Earth year
+//       'Mars': 1.88,              // 1.88 Earth years
+//       'Jupiter': 11.86,          // 11.86 Earth years
+//       'Saturn': 29.46,           // 29.46 Earth years
+//       'Uranus': 84.01,           // 84.01 Earth years
+//       'Neptune': 164.8           // 164.8 Earth years
+//     };
 
-        // Outer ring
-        const saturnRings = viewer.entities.add({
-            name: 'Saturn Rings Outer',
-            position: new Cesium.CallbackProperty(saturnRingPosCallback, false),
-            orientation: new Cesium.CallbackProperty(ringOrientationCallback, false),
-            ellipse: {
-                semiMajorAxis: saturnPlanet.radius * 2.2,
-                semiMinorAxis: saturnPlanet.radius * 2.2,
-                height: saturnPlanet.radius * 4.6, // lift above Saturn's surface
-                material: new Cesium.ImageMaterialProperty({
-                    image: '/saturn_rings_texture.png', 
-                    transparent: true
-                }),            
-            }
-        });
+//     const orbitalPeriod = orbitalPeriods[p.name as keyof typeof orbitalPeriods] || 1.0;
+//     const startOffset = (index * 45) * Math.PI / 180; // Spread planets out initially
 
-        // Inner ring
-        const saturnInnerRings = viewer.entities.add({
-            name: 'Saturn Rings Inner',
-            position: new Cesium.CallbackProperty(saturnRingPosCallback, false),
-            orientation: new Cesium.CallbackProperty(ringOrientationCallback, false),
-            ellipse: {
-                semiMajorAxis: saturnPlanet.radius * 1.8,
-                semiMinorAxis: saturnPlanet.radius * 1.8,
-                height: saturnPlanet.radius * 4.61, // lift above Saturn's surface
-                material: new Cesium.ImageMaterialProperty({
-                    image: '/saturn_rings_texture.png', 
-                    transparent: true
-                }),                    
-                outline: false,
-            }
-        });
+//     let entity;
+//     if (p.name === 'Earth') {
+//       entity = viewer.entities.add({
+//         name: p.name,
+//         position: new Cesium.CallbackProperty(function(time) {
+//           const simSeconds = Cesium.JulianDate.secondsDifference(time, simEpoch);
+//           cbCalls++;
+          
+//           // Calculate orbital position
+//           const speedMultiplier = 500;
+//           const angle = startOffset + (simSeconds * speedMultiplier * 2 * Math.PI) / (orbitalPeriod * 365.25 * 24 * 3600);
+          
+//           const x = p.distance * Math.cos(angle);
+//           const y = p.distance * Math.sin(angle);
+//           const z = 0;
 
-        saturnPlanet.rings = [saturnRings, saturnInnerRings];
-    }
+//           return new Cesium.Cartesian3(x, y, z);
+//         }, false),
+//         ellipsoid: {
+//           radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+//           material: new Cesium.ImageMaterialProperty({
+//             image: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
+//             transparent: false
+//           })
+//         },
+//         label: {
+//           text: p.name,
+//           font: '16pt sans-serif',
+//           fillColor: Cesium.Color.WHITE,
+//           outlineColor: Cesium.Color.BLACK,
+//           outlineWidth: 2,
+//           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+//           eyeOffset: new Cesium.Cartesian3(0, 0, -p.radius * 1.5),
+//           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+//           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+//           scale: 0.8,
+//           show: true,
+//           disableDepthTestDistance: Number.POSITIVE_INFINITY
+//         }
+//       });
+//     } else {
+//       entity = viewer.entities.add({
+//         name: p.name,
+//         position: new Cesium.CallbackProperty(function(time) {
+//           const simSeconds = Cesium.JulianDate.secondsDifference(time, simEpoch);
+//           cbCalls++;
+          
+//           const speedMultiplier = 500;
+//           const angle = startOffset + (simSeconds * speedMultiplier * 2 * Math.PI) / (orbitalPeriod * 365.25 * 24 * 3600);
+          
+//           const x = p.distance * Math.cos(angle);
+//           const y = p.distance * Math.sin(angle);
+//           const z = 0;
+          
+//           return new Cesium.Cartesian3(x, y, z);
+//         }, false),
+//         ellipsoid: {
+//           radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+//           material: new Cesium.ImageMaterialProperty({
+//             image: `/${p.name.toLowerCase()}_texture.jpg`,
+//             transparent: false
+//           })
+//         },
+//         label: {
+//           text: p.name,
+//           font: '16pt sans-serif',
+//           fillColor: Cesium.Color.WHITE,
+//           outlineColor: Cesium.Color.BLACK,
+//           outlineWidth: 2,
+//           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+//           pixelOffset: new Cesium.Cartesian2(0, -50),
+//           horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+//           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+//           scale: 0.8,
+//           show: true
+//         }
+//       });
+//     }
+    
+//     planetEntities.push({ ...p, entity });
+//   });
+// };
+
+    // // Function to toggle between static and orbiting modes
+    // const toggleOrbitMode = () => {
+    //   // Clear existing planets
+    //    console.log('🔍 toggleOrbitMode called, isOrbitingEnabled value:', isOrbitingEnabled);
+  
+    //   // Clear existing planets
+    //   viewer.entities.removeAll();
+    //   planetEntities.length = 0; // Clear the array
+      
+    //   // Recreate planets based on mode
+    //   if (isOrbitingEnabled) {
+    //     console.log('🪐 Creating orbiting planets...');
+    //     viewer.clock.currentTime = Cesium.JulianDate.clone(simEpoch);
+    //     viewer.clock.shouldAnimate = true;          // Allow the clock to tick
+    //     viewer.clock.multiplier = 60 * 60 * 12;     // Speed up 12 hours per second
+
+    //     createOrbitingPlanets();
+    //     console.log('🪐 Switched to orbiting mode');
+    //   } else {
+    //     console.log('⏸️ Creating static planets...');
+    //     viewer.clock.shouldAnimate = false;         // Stop the clock
+
+    //     createStaticPlanets();
+    //     console.log('⏸️ Switched to static mode');
+    //   }
+  
+    //   // Recreate the sun (it gets removed with removeAll)
+    //   const sunEntity = viewer.entities.add({
+    //     name: 'Sun',
+    //     position: Cesium.Cartesian3.fromElements(0, 0, 0),
+    //     ellipsoid: {
+    //       radii: new Cesium.Cartesian3(696340, 696340, 696340),
+    //       material: new Cesium.ImageMaterialProperty({
+    //             image: '/sun_texture.jpg',
+    //             transparent: false
+    //       })
+    //     },
+    //     label: {
+    //       text: 'Sun',
+    //       font: '20pt sans-serif',
+    //       fillColor: Cesium.Color.YELLOW,
+    //       outlineColor: Cesium.Color.BLACK,
+    //       outlineWidth: 3,
+    //       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+    //       pixelOffset: new Cesium.Cartesian2(0, -100), // Position above Sun
+    //       horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+    //       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    //       scale: 1.0,
+    //       show: true
+    //   }
+    //  });
+    // };
+
+    // toggleOrbitModeRef.current = toggleOrbitMode;
+
+    // Initialize with static planets (default mode)
+    // createStaticPlanets();
+
+    
+
+    // Planet visualization state
+    let currentPlanetView : CelestialBody | null = null;
+    let isInFocusMode = false;
 
     // Add Earth's Moon
     const earthPlanet = planetEntities.find(p => p.name === 'Earth');
@@ -319,9 +505,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     ];
 
     let currentPlanetIndex = -1;
-    let currentPlanetView: CelestialBody | null = null;
-    let isInFocusMode = false;
-
+  
     // Planet navigation functions
     const focusOnObject = (position: Cesium.Cartesian3, radius: number, name: string) => {
       isInFocusMode = true;
@@ -343,6 +527,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       planetEntities.forEach(planet => {
         if (planet.name !== name) {
           planet.entity.show = false;
+
+          if (planet.rings) {
+            planet.rings.forEach(ring => ring.show = false);
+          }
         }
       });
       
@@ -517,7 +705,6 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     };
 
     // Double-click handler
-    const canvas = viewer.cesiumWidget.canvas;
     canvas.addEventListener('dblclick', function(event) {
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
@@ -612,7 +799,272 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         viewerRef.current = null;
       }
     };
-  }, [navigate, isGlobeView, isMarsView]); // Add navigate, isGlobeView, and isMarsView as dependencies
+  }, [navigate, isGlobeView, isMarsView]);  // Add navigate, isGlobeView, and isMarsView as dependencies
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+
+    const planets = [
+        { name: 'Mercury', color: Cesium.Color.GRAY, distance: 1e6, radius: 50000 },
+        { name: 'Venus', color: Cesium.Color.BEIGE, distance: 2e6, radius: 120000 },
+        { name: 'Earth', color: Cesium.Color.BLUE, distance: 3e6, radius: 127000 },
+        { name: 'Mars', color: Cesium.Color.RED, distance: 4e6, radius: 70000 },
+        { name: 'Jupiter', color: Cesium.Color.SANDYBROWN, distance: 6e6, radius: 400000 },
+        { name: 'Saturn', color: Cesium.Color.GOLD, distance: 8e6, radius: 350000 },
+        { name: 'Uranus', color: Cesium.Color.CYAN, distance: 10e6, radius: 250000 },
+        { name: 'Neptune', color: Cesium.Color.DEEPSKYBLUE, distance: 12e6, radius: 240000 }
+    ];
+  
+    // Clear existing planets
+    viewer.entities.removeAll();
+    const simEpoch = Cesium.JulianDate.fromDate(new Date()); 
+    const planetEntities: { name: string; entity: Cesium.Entity; distance: number; radius: number; rings?: Cesium.Entity[] }[] = [];
+    
+    // Function to create static planets (no orbiting)
+    const createStaticPlanets = () => {
+      planets.forEach((p) => {
+        let entity;
+
+        if (p.name === 'Earth') {
+          entity = viewer.entities.add({
+            name: p.name,
+            position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+            ellipsoid: {
+              radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+              material: new Cesium.ImageMaterialProperty({
+                image: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
+                transparent: false
+              })
+            },
+            label: {
+              text: p.name,
+              font: '16pt sans-serif',
+              fillColor: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              eyeOffset: new Cesium.Cartesian3(0, 0, -p.radius * 1.5),
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              scale: 0.8,
+              show: true,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+          });
+        } else {
+          entity = viewer.entities.add({
+            name: p.name,
+            position: Cesium.Cartesian3.fromElements(p.distance, 0, 0), // Static position
+            ellipsoid: {
+              radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+              material: new Cesium.ImageMaterialProperty({
+                image: `/${p.name.toLowerCase()}_texture.jpg`,
+                transparent: false
+              })
+            },
+            label: {
+              text: p.name,
+              font: '16pt sans-serif',
+              fillColor: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 2,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              pixelOffset: new Cesium.Cartesian2(0, -50),
+              horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              scale: 0.8,
+              show: true
+            }
+          });
+        }
+        
+        planetEntities.push({ ...p, entity });
+      });
+    };
+
+    // Function to create orbiting planets (with callbacks)
+    // Replace the createOrbitingPlanets function (lines 825-922) with this:
+
+  // Function to create orbiting planets (with callbacks)
+  const createOrbitingPlanets = () => {
+    planets.forEach((p, index) => {
+      // Orbital parameters
+      const orbitalPeriods = {
+        'Mercury': 88 / 365.25,    // 88 Earth days
+        'Venus': 225 / 365.25,     // 225 Earth days  
+        'Earth': 1.0,              // 1 Earth year
+        'Mars': 1.88,              // 1.88 Earth years
+        'Jupiter': 11.86,          // 11.86 Earth years
+        'Saturn': 29.46,           // 29.46 Earth years
+        'Uranus': 84.01,           // 84.01 Earth years
+        'Neptune': 164.8           // 164.8 Earth years
+      };
+
+      const orbitalPeriod = orbitalPeriods[p.name as keyof typeof orbitalPeriods] || 1.0;
+      const startOffset = (index * 45) * Math.PI / 180; // Spread planets out initially
+
+      let entity;
+      entity = viewer.entities.add({
+        name: p.name,
+        position: new Cesium.CallbackProperty(function(time) {
+          const simSeconds = Cesium.JulianDate.secondsDifference(time, simEpoch);
+          
+          // Calculate orbital position
+          const speedMultiplier = 500;
+          const angle = startOffset + (simSeconds * speedMultiplier * 2 * Math.PI) / (orbitalPeriod * 365.25 * 24 * 3600);
+          
+          const x = p.distance * Math.cos(angle);
+          const y = p.distance * Math.sin(angle);
+          const z = 0;
+
+          return new Cesium.Cartesian3(x, y, z);
+        }, false),
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+          material: p.color // Use the plain color from planets array
+        },
+        label: {
+          text: p.name,
+          font: '16pt sans-serif',
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -50),
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          scale: 0.8,
+          show: true
+        }
+      });
+      
+      planetEntities.push({ ...p, entity });
+    });
+  };
+
+    // Only toggle if we have a viewer and we're not in other views
+    if (viewerRef.current && !isGlobeView && !isMarsView) {
+      console.log('🔄 Orbit mode changed, calling toggleOrbitMode...');
+
+      // Clear existing planets
+      console.log('🔍 toggleOrbitMode called, isOrbitingEnabled value:', isOrbitingEnabled);
+
+      planetEntities.length = 0; // Clear the array
+      
+      // Recreate planets based on mode
+      if (isOrbitingEnabled) {
+        console.log('🪐 Creating orbiting planets...');
+        viewer.clock.currentTime = Cesium.JulianDate.clone(simEpoch);
+        viewer.clock.shouldAnimate = true;          // Allow the clock to tick
+        viewer.clock.multiplier = 60 * 60 * 1;     // Speed up 12 hours per second
+
+        createOrbitingPlanets();
+        console.log('🪐 Switched to orbiting mode');
+      } else {
+        console.log('⏸️ Creating static planets...');
+        viewer.clock.shouldAnimate = false;         // Stop the clock
+
+        createStaticPlanets();
+        console.log('⏸️ Switched to static mode');
+      }
+
+      // Add Saturn's rings
+    const saturnPlanet = planetEntities.find(p => p.name === 'Saturn');
+    if (saturnPlanet) {
+        const saturnRingPosCallback = (time, result) => {
+            const pos = saturnPlanet.entity.position.getValue(time, result);
+            
+            // Compute Saturn's "up" vector (from origin to center)
+            const up = Cesium.Cartesian3.normalize(pos, new Cesium.Cartesian3());
+            
+            // Move ring slightly above surface along this up vector
+            const offset = saturnPlanet.radius * 10; // 5% above surface
+            return Cesium.Cartesian3.add(pos, Cesium.Cartesian3.multiplyByScalar(up, offset, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+        };
+
+        // Orientation for rings
+        const tiltRad = Cesium.Math.toRadians(26.7); // Saturn's axial tilt
+        const ringOrientationCallback = (time, result) => {
+            const pos = saturnPlanet.entity.position.getValue(time);
+            const hpr = new Cesium.HeadingPitchRoll(0, tiltRad, 0);
+            return Cesium.Transforms.headingPitchRollQuaternion(pos, hpr, Cesium.Ellipsoid.WGS84, Cesium.Transforms.eastNorthUpToFixedFrame, result);
+        };
+
+        // Outer ring
+        const saturnRings = viewer.entities.add({
+            name: 'Saturn Rings Outer',
+            position: new Cesium.CallbackProperty(saturnRingPosCallback, false),
+            orientation: new Cesium.CallbackProperty(ringOrientationCallback, false),
+            ellipse: {
+                semiMajorAxis: saturnPlanet.radius * 2.2,
+                semiMinorAxis: saturnPlanet.radius * 2.2,
+                height: saturnPlanet.radius * 4.6, // lift above Saturn's surface
+                // material: new Cesium.ImageMaterialProperty({
+                //     image: '/saturn_rings_texture.png', 
+                //     transparent: true
+                // }),   
+                 material: new Cesium.ColorMaterialProperty(
+                Cesium.Color.LIGHTGRAY.withAlpha(0.6) // Light grey translucent
+            ),
+              outline: false         
+            }
+        });
+
+        // Inner ring
+        const saturnInnerRings = viewer.entities.add({
+            name: 'Saturn Rings Inner',
+            position: new Cesium.CallbackProperty(saturnRingPosCallback, false),
+            orientation: new Cesium.CallbackProperty(ringOrientationCallback, false),
+            ellipse: {
+                semiMajorAxis: saturnPlanet.radius * 1.8,
+                semiMinorAxis: saturnPlanet.radius * 1.8,
+                height: saturnPlanet.radius * 4.61, // lift above Saturn's surface
+                // material: new Cesium.ImageMaterialProperty({
+                //     image: '/saturn_rings_texture.png', 
+                //     transparent: true
+                // }),   
+                 material: new Cesium.ColorMaterialProperty(
+                Cesium.Color.LIGHTGRAY.withAlpha(0.6) // Light grey translucent
+            ),                 
+                outline: false,
+            }
+        });
+
+        saturnPlanet.rings = [saturnRings, saturnInnerRings];
+    }
+  
+      // Recreate the sun (it gets removed with removeAll)
+      const sunEntity = viewer.entities.add({
+        name: 'Sun',
+        position: Cesium.Cartesian3.fromElements(0, 0, 0),
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(696340, 696340, 696340),
+          material: new Cesium.ImageMaterialProperty({
+                image: '/sun_texture.jpg',
+                transparent: false
+          })
+        },
+        label: {
+          text: 'Sun',
+          font: '20pt sans-serif',
+          fillColor: Cesium.Color.YELLOW,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -100), // Position above Sun
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          scale: 1.0,
+          show: true
+      }
+     });
+      
+      // Call the toggleOrbitMode function through the ref
+      // if (toggleOrbitModeRef.current) {
+      //   toggleOrbitModeRef.current();
+      // }
+    }
+  }, [isOrbitingEnabled, isGlobeView, isMarsView]); // React to orbit changes
 
   const resetCamera = (viewer: Cesium.Viewer, marsPlanet: { distance: number } | null) => {
     if (!marsPlanet) return;
@@ -739,9 +1191,21 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           >
             Reset
           </button>
+          <button 
+            onClick={handleToggleOrbit}
+            className={`px-3 py-1 text-white rounded text-sm transition-colors ${
+              isOrbitingEnabled 
+                ? 'bg-green-500 hover:bg-green-600' 
+                : 'bg-gray-500 hover:bg-gray-600'
+            }`}
+            title="Toggle Orbital Movement"
+          >
+            {isOrbitingEnabled ? '🌍 Orbiting' : '⏸️ Static'}
+        </button>
         </div>
         <div className="text-xs text-gray-300">
           Earth now shows realistic surface! 🌍<br />
+          Toggle orbit mode: {isOrbitingEnabled ? 'ON' : 'OFF'}<br />
           Double-click planets to focus
         </div>
       </div>
@@ -753,6 +1217,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           Left Click + Drag: Rotate<br />
           Right Click + Drag: Pan<br />
           Mouse Wheel: Zoom<br />
+          <strong className="text-green-300">Orbit Toggle: Enable/Disable Movement</strong><br />
           <strong className="text-purple-300">Double-Click Planets: Focus View</strong><br />
           <strong className="text-purple-300">Arrow Keys: Navigate Planets</strong><br />
           <strong className="text-purple-300">Space: Reset to System View</strong><br />
