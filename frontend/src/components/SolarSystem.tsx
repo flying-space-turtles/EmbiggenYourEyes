@@ -144,7 +144,9 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       baseLayerPicker: false,
       geocoder: false,
       homeButton: false,
-      sceneModePicker: false
+      sceneModePicker: false,
+      fullscreenButton: false,
+      navigationHelpButton: false
     });
 
     viewerRef.current = viewer as ExtendedViewer;
@@ -197,7 +199,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 3,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(0, -100), // Position above Sun
+        pixelOffset: new Cesium.Cartesian2(0, -120), // Position above Sun
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         scale: 1.0,
@@ -679,8 +681,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         }
       });
       sunEntity.show = true;
-      
-      resetCamera(viewer);
+
+      const marsPlanet = planetEntities.find(p => p.name === 'Mars');
+      resetCamera(viewer, marsPlanet || null);
+
       currentPlanetView = null;
       isInFocusMode = false;
       currentPlanetIndex = -1;
@@ -703,6 +707,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           planetEntities.forEach(planet => {
             if (planet.name !== 'Earth') {
               planet.entity.show = false;
+
+              if (planet.rings) {
+                planet.rings.forEach(ring => ring.show = false);
+              }
             }
           });
           sunEntity.show = false;
@@ -814,6 +822,11 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
   }, [navigate, isGlobeView, isMarsView]);  // Add navigate, isGlobeView, and isMarsView as dependencies
 
   useEffect(() => {
+     // Only proceed if we have a viewer and we're not in other views
+    if (!viewerRef.current || isGlobeView || isMarsView) {
+      return;
+    }
+
     const viewer = viewerRef.current;
 
     const planets = [
@@ -895,7 +908,6 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     };
 
     // Function to create orbiting planets (with callbacks)
-    // Replace the createOrbitingPlanets function (lines 825-922) with this:
 
   // Function to create orbiting planets (with callbacks)
   const createOrbitingPlanets = () => {
@@ -1071,19 +1083,56 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       }
      });
       
-      // Call the toggleOrbitMode function through the ref
-      // if (toggleOrbitModeRef.current) {
-      //   toggleOrbitModeRef.current();
-      // }
+     // Adjust camera position based on current mode
+    if (isOrbitingEnabled) {
+      console.log('📷 Setting zoomed out camera for orbiting mode...');
+       const cameraPosition = new Cesium.Cartesian3(-6e6, -25e6, 12e6);
+       const lookAtCenter = new Cesium.Cartesian3(0, 0, 0); // Look toward middle of solar system
+
+      // Zoomed out view for orbiting mode - can see full orbital paths
+      viewer.camera.setView({
+        destination: cameraPosition, // Much further back and higher
+        orientation: {
+           direction: Cesium.Cartesian3.normalize(
+              Cesium.Cartesian3.subtract(
+                lookAtCenter,
+                cameraPosition,
+                new Cesium.Cartesian3()
+              ), 
+              new Cesium.Cartesian3()
+            ),
+            up: Cesium.Cartesian3.UNIT_Z
+        }
+      });
+    } else {
+      console.log('📷 Setting closer camera for static mode...');
+      // Closer view for static mode - focused on planet lineup
+      const marsPlanet = planetEntities.find(p => p.name === 'Mars');
+      if (marsPlanet) {
+        resetCamera(viewer, marsPlanet, isOrbitingEnabled);
+      }
+    }
+
+    console.log('✅ Mode switch complete with camera adjustment');
     }
   }, [isOrbitingEnabled, isGlobeView, isMarsView]); // React to orbit changes
 
-  const resetCamera = (viewer: Cesium.Viewer, marsPlanet: { distance: number } | null) => {
+  const resetCamera = (viewer: Cesium.Viewer, marsPlanet: { distance: number } | null, isOrbiting: boolean) => {
     if (!marsPlanet) return;
     
     const marsPosition = new Cesium.Cartesian3(marsPlanet.distance, 0, 0);
-    const cameraPosition = new Cesium.Cartesian3(-2e6, -12e6, 1e6);
-    const lookAtCenter = new Cesium.Cartesian3(6e6, 0, 0); // Look toward middle of solar system
+    let cameraPosition;
+    let lookAtCenter;
+    if (isOrbiting) {
+      // Wide orbit view - can see all planets moving in their circular paths
+      cameraPosition = new Cesium.Cartesian3(-6e6, -25e6, 12e6);
+      lookAtCenter = new Cesium.Cartesian3(0, 0, 0); 
+      console.log('📷 Camera set for orbiting mode');
+    } else {
+      cameraPosition = new Cesium.Cartesian3(-2e6, -12e6, 1e6);
+      lookAtCenter = new Cesium.Cartesian3(6e6, 0, 0); // Look toward middle of solar system
+      console.log('📷 Camera set for staticss mode');
+    }
     
     viewer.camera.flyTo({
       destination: cameraPosition,
