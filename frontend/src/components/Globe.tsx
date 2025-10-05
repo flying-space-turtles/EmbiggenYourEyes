@@ -539,8 +539,6 @@ const Globe: React.FC<GlobeProps> = ({
         )}
       </div>
     </div>
-        </div>
-      </div>
 
     {/* Cesium Container */}
     <div
@@ -549,26 +547,26 @@ const Globe: React.FC<GlobeProps> = ({
       style={{ width, height }}
     />
 
-      {/* Screenshot Modal */}
-      <ScreenshotModal
-        isOpen={showScreenshotModal}
-        screenshotUrl={screenshotUrl}
-        onClose={handleCloseScreenshotModal}
-        onDownload={handleDownloadScreenshot}
-        onRetakeWithDate={handleRetakeWithDate}
-      />
+    {/* Screenshot Modal */}
+    <ScreenshotModal
+      isOpen={showScreenshotModal}
+      screenshotUrl={screenshotUrl}
+      onClose={handleCloseScreenshotModal}
+      onDownload={handleDownloadScreenshot}
+      onRetakeWithDate={handleRetakeWithDate}
+    />
 
-      {/* Comparison Modal */}
-      <ComparisonModal
-        isOpen={showComparisonModal}
-        beforeImage={comparisonImages?.beforeImage || null}
-        afterImage={comparisonImages?.afterImage || null}
-        beforeDate={comparisonImages?.beforeDate || ''}
-        afterDate={comparisonImages?.afterDate || ''}
-        onClose={handleCloseComparisonModal}
-        onDownload={handleDownloadComparison}
-        onRetakeImages={handleRetakeComparisonImages}
-      />
+    {/* Comparison Modal */}
+    <ComparisonModal
+      isOpen={showComparisonModal}
+      beforeImage={comparisonImages?.beforeImage || null}
+      afterImage={comparisonImages?.afterImage || null}
+      beforeDate={comparisonImages?.beforeDate || ''}
+      afterDate={comparisonImages?.afterDate || ''}
+      onClose={handleCloseComparisonModal}
+      onDownload={handleDownloadComparison}
+      onRetakeImages={handleRetakeComparisonImages}
+    />
     </div>
   );
 };
