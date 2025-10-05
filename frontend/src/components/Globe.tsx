@@ -7,6 +7,7 @@ import { useScreenshot } from "../hooks/useScreenshot";
 import { useFlyToCoords } from "../hooks/useFlyToCoords";
 import { type FlyToCoords } from "../types/FlyToCoords";
 import { addSampleLocations } from "../utils/cesiumHelpers";
+import { useViewportCenter } from "../hooks/useViewportCenter";
 
 interface GlobeProps {
   width?: string;
@@ -64,6 +65,9 @@ const Globe: React.FC<GlobeProps> = ({
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
+
+  const [region, setRegion] = useState<string | null>(null);
+  const [loadingRegion, setLoadingRegion] = useState(false); 
 
   // useCesiumViewer({ containerRef: cesiumContainer, viewer });
   useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
@@ -173,108 +177,158 @@ const Globe: React.FC<GlobeProps> = ({
     applyGibsOverlay(layerId, dateStr, meta.format);
   };
 
+  const viewportCoords = useViewportCenter(viewer);
+
+  const fetchRegion = async () => {
+    if (!viewportCoords) {
+      setRegion("Viewport coordinates are not available.");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/get_region/?lat=${viewportCoords.lat}&lon=${viewportCoords.lon}`);
+      const text = await response.text(); // first get raw text
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setRegion("Failed to parse backend response: " + text);
+        return;
+      }
+      setRegion(data.region || "Unknown region");
+    } catch (err) {
+      setRegion("Failed to get region: " + err);
+    }
+  };
+
+
   return (
-    <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
-      {/* Top Right Controls */}
-      <div className="absolute right-4 top-4 z-20 flex flex-col items-end gap-3">
-        <div className="flex items-start gap-3">
-          <SearchBox onResult={handleSearchResult} />
-          <button
-            onClick={takeScreenshot}
-            className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
-            title="Take Screenshot"
+  <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
+    {/* Top Right Controls */}
+    <div className="absolute right-4 top-4 z-20 flex flex-col items-end gap-3">
+      <div className="flex items-start gap-3">
+        <SearchBox onResult={handleSearchResult} />
+        <button
+          onClick={takeScreenshot}
+          className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+          title="Take Screenshot"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
-        </div>
-        <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
-          GIBS Surface (EPSG:3857)
-        </div>
-
-        <div className="grid gap-1.5 bg-black/70 p-3 rounded-lg backdrop-blur-sm text-white min-w-64">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Layer</span>
-            <select
-              value={layerId}
-              onChange={(e) => setLayerId(e.target.value)}
-              className="w-full p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-            >
-              {LAYERS.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Time</span>
-            <div className="flex gap-1.5">
-              <select
-                value={dateStr === "default" ? "default" : "custom"}
-                onChange={(e) =>
-                  setDateStr(e.target.value === "default" ? "default" : new Date().toISOString().slice(0, 10))
-                }
-                className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="default">default (latest)</option>
-                <option value="custom">custom date</option>
-              </select>
-              <input
-                type="date"
-                value={dateStr === "default" ? "" : dateStr}
-                onChange={(e) => setDateStr(e.target.value || "default")}
-                disabled={dateStr === "default"}
-                className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-            </div>
-          </label>
-
-          <button 
-            onClick={applySurface} 
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
-          >
-            Apply
-          </button>
-
-          <div className="text-xs opacity-70 mt-2">
-            Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
-          </div>
-        </div>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+          </svg>
+        </button>
       </div>
 
-      {/* Cesium Container */}
-      <div
-        ref={cesiumContainer}
-        className="overflow-hidden w-full h-full"
-        style={{ width, height }}
-      />
+      <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
+        GIBS Surface (EPSG:3857)
+      </div>
 
-      {/* Screenshot Modal */}
-      <ScreenshotModal
-        isOpen={showScreenshotModal}
-        screenshotUrl={screenshotUrl}
-        onClose={handleCloseScreenshotModal}
-        onDownload={handleDownloadScreenshot}
-      />
+      <div className="grid gap-1.5 bg-black/70 p-3 rounded-lg backdrop-blur-sm text-white min-w-64">
+        {/* Layer & Time Controls */}
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Layer</span>
+          <select
+            value={layerId}
+            onChange={(e) => setLayerId(e.target.value)}
+            className="w-full p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+          >
+            {LAYERS.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Time</span>
+          <div className="flex gap-1.5">
+            <select
+              value={dateStr === "default" ? "default" : "custom"}
+              onChange={(e) =>
+                setDateStr(e.target.value === "default" ? "default" : new Date().toISOString().slice(0, 10))
+              }
+              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="default">default (latest)</option>
+              <option value="custom">custom date</option>
+            </select>
+            <input
+              type="date"
+              value={dateStr === "default" ? "" : dateStr}
+              onChange={(e) => setDateStr(e.target.value || "default")}
+              disabled={dateStr === "default"}
+              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+        </label>
+
+        <button 
+          onClick={applySurface} 
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
+        >
+          Apply
+        </button>
+
+        <div className="text-xs opacity-70 mt-2">
+          Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
+        </div>
+
+        {viewportCoords && (
+          <div className="text-xs text-white mt-2 bg-black/60 px-2 py-1 rounded">
+            Viewport Center: {viewportCoords.lat.toFixed(3)}°, {viewportCoords.lon.toFixed(3)}°
+          </div>
+        )}
+      </div>
+
+      {/* Region/AI Panel under the other controls */}
+      <div className="w-80 max-w-xs mt-2 flex flex-col gap-2 p-3 bg-black/70 text-white rounded-lg shadow-lg break-words">
+        <button
+          onClick={fetchRegion}
+          disabled={loadingRegion}
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+        >
+          {loadingRegion ? "Fetching region..." : "Get Region Info"}
+        </button>
+
+        {region && (
+          <div>
+            <span className="font-semibold">Current region:</span>
+            <p className="mt-1">{region}</p>
+          </div>
+        )}
+      </div>
     </div>
-  );
+
+    {/* Cesium Container */}
+    <div
+      ref={cesiumContainer}
+      className="overflow-hidden w-full h-full"
+      style={{ width, height }}
+    />
+
+    {/* Screenshot Modal */}
+    <ScreenshotModal
+      isOpen={showScreenshotModal}
+      screenshotUrl={screenshotUrl}
+      onClose={handleCloseScreenshotModal}
+      onDownload={handleDownloadScreenshot}
+    />
+  </div>
+);
 };
 
 export default Globe;
