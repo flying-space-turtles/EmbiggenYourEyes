@@ -4,6 +4,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
 import ComparisonModal from "./ComparisonModal";
 import SearchBox from "./SearchBox";
+import GeminiResponsePanel from "./GeminiResponsePanel";
 import { useScreenshot } from "../hooks/useScreenshot";
 import { useComparisonScreenshot } from "../hooks/useComparisonScreenshot";
 import { useFlyToCoords } from "../hooks/useFlyToCoords";
@@ -68,9 +69,6 @@ const Globe: React.FC<GlobeProps> = ({
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
   const [region, setRegion] = useState<string | null>(null);
-  const [loadingRegion, setLoadingRegion] = useState(false);
-  const [historicalPrompt, setHistoricalPrompt] = useState<string | null>(null);
-  const [loadingPrompt, setLoadingPrompt] = useState(false);
   const [geminiResponse, setGeminiResponse] = useState<string | null>(null);
   const [loadingGemini, setLoadingGemini] = useState(false);
 
@@ -318,9 +316,9 @@ const Globe: React.FC<GlobeProps> = ({
       setGeminiResponse("Viewport coordinates are not available.");
       return;
     }
-    
+
     setLoadingGemini(true);
-    
+
     // Build URL with all 4 corner coordinates (same as other functions)
     const params = new URLSearchParams({
       top_left_lat: viewportBounds.topLeft.lat.toString(),
@@ -332,7 +330,7 @@ const Globe: React.FC<GlobeProps> = ({
       bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
       bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
     });
-                      
+
     try {
       const response = await fetch(`/api/ask_gemini/?${params}`);
       const text = await response.text();
@@ -343,7 +341,7 @@ const Globe: React.FC<GlobeProps> = ({
         setGeminiResponse("Failed to parse backend response: " + text);
         return;
       }
-      
+
       if (data.historical_info) {
         setGeminiResponse(data.historical_info);
         console.log("Gemini response received from:", data.model_used);
@@ -534,160 +532,33 @@ const Globe: React.FC<GlobeProps> = ({
       </div>
 
       {/* Region/AI Panel under the other controls */}
-      <div className="w-80 max-w-xs mt-2 flex flex-col gap-2 p-3 bg-black/70 text-white rounded-lg shadow-lg break-words">
-        <div className="flex flex-col gap-2">          
-          <button
-            onClick={askGeminiAboutRegion}
-            disabled={loadingGemini}
-            className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors text-sm"
-          >
-            {loadingGemini ? "Asking Gemini..." : "🤖 Ask Gemini About This Region"}
-          </button>
-        </div>
+      <div className="w-80 max-w-xs mt-2 p-3 bg-black/70 text-white rounded-lg shadow-lg backdrop-blur-sm border border-gray-600/30">
+        <button
+          onClick={askGeminiAboutRegion}
+          disabled={loadingGemini}
+          className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors text-sm disabled:opacity-50"
+        >
+          {loadingGemini ? "Asking Gemini..." : "🤖 Ask Gemini About This Region"}
+        </button>
 
         {region && (
-          <div>
-            <span className="font-semibold">Current region:</span>
-            <p className="mt-1 text-sm">{region}</p>
-          </div>
-        )}
-
-        {historicalPrompt && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-semibold text-sm">LLM Prompt for History & Landmarks:</span>
-              <button
-                onClick={() => navigator.clipboard.writeText(historicalPrompt)}
-                className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors"
-                title="Copy to clipboard"
-              >
-                Copy
-              </button>
-            </div>
-            <textarea
-              value={historicalPrompt}
-              readOnly
-              className="w-full h-32 p-2 bg-gray-800 text-white text-xs rounded border border-gray-600 resize-none"
-              placeholder="Historical prompt will appear here..."
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Copy this prompt and paste it into ChatGPT, Claude, or any other LLM to learn about this region's history!
-            </p>
-          </div>
-        )}
-
-        {geminiResponse && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-semibold text-sm text-purple-300 flex items-center">
-                <span className="mr-2">🤖</span>
-                Gemini AI Response
-              </span>
-              <button
-                onClick={() => navigator.clipboard.writeText(geminiResponse)}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs transition-all hover:scale-105 shadow-sm"
-                title="Copy to clipboard"
-              >
-                📋 Copy
-              </button>
-            </div>
-            <div className="w-full max-h-64 p-4 bg-gradient-to-br from-gray-800 via-gray-850 to-gray-900 text-white text-xs rounded-lg border border-gray-600 shadow-lg overflow-y-auto animate-fadeIn">
-              {(() => {
-                // Clean up the response and parse it properly
-                const cleanResponse = geminiResponse
-                  .replace(/🏛️🏛️/g, '🏛️') // Fix duplicate emojis
-                  .replace(/💡💡/g, '💡')
-                  .replace(/📜📜/g, '📜');
-
-                // Split by lines and process each section
-                const lines = cleanResponse.split('\n').filter(line => line.trim());
-                const result = [];
-                let currentSection = null;
-                let currentBullets = [];
-
-                for (const line of lines) {
-                  const trimmedLine = line.trim();
-                  
-                  // Check if this is a section header
-                  if (trimmedLine.includes(':') && (
-                    trimmedLine.includes('Historical Events') ||
-                    trimmedLine.includes('Landmarks') ||
-                    trimmedLine.includes('Notable Facts') ||
-                    trimmedLine.includes('Events') ||
-                    trimmedLine.includes('Facts')
-                  )) {
-                    // Save previous section if exists
-                    if (currentSection && currentBullets.length > 0) {
-                      result.push({
-                        title: currentSection,
-                        bullets: [...currentBullets]
-                      });
-                    }
-                    
-                    // Start new section
-                    currentSection = trimmedLine
-                      .replace(/🏛️/g, '') // Remove building emoji
-                      .replace(/📜/g, '') // Remove scroll emoji
-                      .replace(/💡/g, '') // Remove lightbulb emoji
-                      .replace(/:/g, '') // Remove colons
-                      .trim();
-                    currentBullets = [];
-                  }
-                  // Check if this is a bullet point
-                  else if (trimmedLine.startsWith('•') || trimmedLine.includes('* ')) {
-                    const bulletText = trimmedLine
-                      .replace(/^[•*]\s*/, '') // Remove bullet markers
-                      .replace(/^\*\s*/, '') // Remove asterisk bullets
-                      .trim();
-                    
-                    // Handle cases where bullets are split by asterisks
-                    const parts = bulletText.split(' * ').filter(part => part.trim());
-                    currentBullets.push(...parts);
-                  }
-                }
-                
-                // Add the last section
-                if (currentSection && currentBullets.length > 0) {
-                  result.push({
-                    title: currentSection,
-                    bullets: [...currentBullets]
-                  });
-                }
-
-                // Render the parsed sections
-                if (result.length > 0) {
-                  return result.map((section, sectionIdx) => (
-                    <div key={sectionIdx} className="mb-4 last:mb-0 p-3 rounded-md bg-black/20 border-l-3 border-blue-400/40">
-                      <h4 className="font-semibold text-blue-300 mb-2 flex items-center text-sm">
-                        {(section.title.includes('Historical') || section.title.includes('Events')) && '📜'}
-                        {section.title.includes('Landmarks') && '🏛️'}
-                        {(section.title.includes('Notable') || section.title.includes('Facts')) && '💡'}
-                        <span className="ml-2">{section.title}</span>
-                      </h4>
-                      <ul className="space-y-2 ml-3">
-                        {section.bullets.map((bullet, idx) => (
-                          <li key={idx} className="flex items-start group">
-                            <span className="text-yellow-400 mr-3 mt-0.5 group-hover:text-yellow-300 transition-colors">•</span>
-                            <span className="text-gray-200 leading-relaxed group-hover:text-white transition-colors text-sm">{bullet}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ));
-                }
-                
-                // If parsing fails, fall back to original text
-                return (
-                  <pre className="whitespace-pre-wrap font-sans text-gray-200 text-sm leading-relaxed">{geminiResponse}</pre>
-                );
-              })()}
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Historical information about this region generated by Gemini AI
-            </p>
+          <div className="mt-3 p-2 bg-black/30 rounded text-sm">
+            <span className="font-medium text-gray-300">Current region:</span>
+            <p className="mt-1 text-gray-100">{region}</p>
           </div>
         )}
       </div>
+
+      {/* Gemini Response Panel */}
+      {(geminiResponse || loadingGemini) && (
+        <div className="w-80 max-w-xs">
+          <GeminiResponsePanel
+            response={geminiResponse || ''}
+            isLoading={loadingGemini}
+            onClose={() => setGeminiResponse(null)}
+          />
+        </div>
+      )}
     </div>
 
     {/* Cesium Container */}
