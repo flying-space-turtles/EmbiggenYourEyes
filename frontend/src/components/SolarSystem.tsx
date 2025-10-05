@@ -300,10 +300,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
                 semiMajorAxis: saturnPlanet.radius * 2.2,
                 semiMinorAxis: saturnPlanet.radius * 2.2,
                 height: saturnPlanet.radius * 4.6, // lift above Saturn's surface
-                material: new Cesium.ImageMaterialProperty({
-                    image: '/saturn_rings_texture.png', 
-                    transparent: true
-                }),            
+                material: new Cesium.ColorMaterialProperty(
+                Cesium.Color.LIGHTGRAY.withAlpha(0.6) // Light grey translucent
+                ), 
+                outline: false                    
             }
         });
 
@@ -316,11 +316,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
                 semiMajorAxis: saturnPlanet.radius * 1.8,
                 semiMinorAxis: saturnPlanet.radius * 1.8,
                 height: saturnPlanet.radius * 4.61, // lift above Saturn's surface
-                material: new Cesium.ImageMaterialProperty({
-                    image: '/saturn_rings_texture.png', 
-                    transparent: true
-                }),                    
-                outline: false,
+                material: new Cesium.ColorMaterialProperty(
+                Cesium.Color.LIGHTGRAY.withAlpha(0.6) // Light grey translucent
+                ), 
+                outline: false  
             }
         });
 
@@ -398,6 +397,9 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       planetEntities.forEach(planet => {
         if (planet.name !== name) {
           planet.entity.show = false;
+        }
+        if (planet.rings) {
+          planet.rings.forEach(ring => ring.show = false);
         }
       });
       
@@ -514,6 +516,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
           planetEntities.forEach(planet => {
             if (planet.name !== 'Earth') {
               planet.entity.show = false;
+
+              if (planet.rings) {
+                planet.rings.forEach(ring => ring.show = false);
+              }
             }
           });
           sunEntity.show = false;
