@@ -367,11 +367,10 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         },
         duration: 2.0,
         complete: () => {
-          // Set the camera's reference frame to look at the planet center
-          // This ensures rotation happens around the planet
+          // Set the camera's reference frame to rotate around the planet center
+          // But don't override the current camera position
           viewer.camera.lookAtTransform(
-            Cesium.Transforms.eastNorthUpToFixedFrame(position),
-            new Cesium.Cartesian3(0.0, 0.0, cameraDistance)
+            Cesium.Transforms.eastNorthUpToFixedFrame(position)
           );
         }
       });
