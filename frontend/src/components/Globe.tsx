@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
+import { Cartesian3, ConstantProperty, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
 import ComparisonModal from "./ComparisonModal";
@@ -214,22 +214,30 @@ const Globe: React.FC<GlobeProps> = ({
     setSearchCoords(data);
   };
 
-  const handleTakeScreenshot = () => {
-    takeScreenshot();
+  const handleTakeScreenshot = async () => {
+    hideLabels();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await takeScreenshot();
+    showLabels();
   };
 
   const handleRetakeWithDate = async (date: string) => {
     await takeScreenshot(date);
   };
 
-  const handleComparisonScreenshot = () => {
+  const handleComparisonScreenshot = async () => {
+    hideLabels();
+
     // Default to current date and a date one year ago
     const currentDate = new Date().toISOString().slice(0, 10);
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const beforeDate = oneYearAgo.toISOString().slice(0, 10);
 
-    takeComparisonScreenshots(beforeDate, currentDate);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await takeComparisonScreenshots(beforeDate, currentDate);
+
+    showLabels();
   };
 
   const handleRetakeComparisonImages = async (beforeDate: string, afterDate: string) => {
@@ -243,6 +251,54 @@ const Globe: React.FC<GlobeProps> = ({
   const handleCloseComparisonModal = () => {
     closeComparisonModal();
   };
+
+  const toggleLabels = () => {
+      viewer.current?.entities.values.forEach(entity => {
+        if (entity.point) {
+          const currentPoint = (entity.point.show instanceof ConstantProperty)
+            ? entity.point.show.getValue()
+            : true;
+          entity.point.show = new ConstantProperty(!currentPoint);
+        }
+
+        if (entity.label) {
+          const currentLabel = (entity.label.show instanceof ConstantProperty)
+            ? entity.label.show.getValue()
+            : true;
+          entity.label.show = new ConstantProperty(!currentLabel);
+        }
+      });
+
+      viewer.current?.scene.requestRender(); // force redraw
+    };
+
+  const hideLabels = () => {
+    viewer.current?.entities.values.forEach(entity => {
+        if (entity.point) {
+          entity.point.show = new ConstantProperty(false);
+        }
+
+        if (entity.label) {
+          entity.label.show = new ConstantProperty(false);
+        }
+      });
+
+      viewer.current?.scene.requestRender(); // force redraw
+    };
+  
+    const showLabels = () => {
+    viewer.current?.entities.values.forEach(entity => {
+        if (entity.point) {
+          entity.point.show = new ConstantProperty(true);
+        }
+
+        if (entity.label) {
+          entity.label.show = new ConstantProperty(true);
+        }
+      });
+
+      viewer.current?.scene.requestRender(); // force redraw
+    };
 
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
@@ -448,6 +504,14 @@ const Globe: React.FC<GlobeProps> = ({
               />
             </svg>
           </button>
+
+
+
+          <button onClick={toggleLabels} className="rounded-lg bg-blue-600/80 p-2 text-white transition-all 
+          hover:bg-blue-700/80 focus:outline-none focus:ring-2 focus:ring-white/50" title="Toggle Labels">🏷️</button>
+
+
+
         </div>
         <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
           GIBS Surface (EPSG:3857)
