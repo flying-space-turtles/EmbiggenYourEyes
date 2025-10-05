@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Cartesian3, ConstantProperty, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
+import { Cartesian3, ConstantProperty, Credit, ImageryLayer, Ion, ScreenSpaceEventType, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
 import ComparisonModal from "./ComparisonModal";
@@ -333,6 +333,28 @@ const Globe: React.FC<GlobeProps> = ({
         destination: Cartesian3.fromDegrees(0, 0, 2.0e7),
         orientation: { heading: 0, pitch: -1.57, roll: 0 },
       });
+
+      // Disable entity selection to prevent camera disruption
+      // Use setTimeout to ensure viewer is fully initialized
+      setTimeout(() => {
+        try {
+          if (viewer.current && viewer.current.cesiumWidget && viewer.current.cesiumWidget.screenSpaceEventHandler) {
+            // Override the default left click behavior to prevent entity selection
+            viewer.current.cesiumWidget.screenSpaceEventHandler.setInputAction(() => {
+              // Do nothing - this prevents the default click behavior
+            }, ScreenSpaceEventType.LEFT_CLICK);
+            
+            // Override double click to prevent any zoom/selection behavior
+            viewer.current.cesiumWidget.screenSpaceEventHandler.setInputAction(() => {
+              // Do nothing - this prevents the default double-click behavior
+            }, ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+            
+            console.log("Successfully disabled entity selection");
+          }
+        } catch (error) {
+          console.warn("Could not disable entity selection:", error);
+        }
+      }, 100); // Small delay to ensure initialization
 
       addSampleLocations(viewer.current);
     }
