@@ -12,7 +12,7 @@ export const useCesiumViewer = ({ containerRef, viewer }: UseCesiumViewerProps) 
     if (containerRef.current && !viewer.current) {
       // Set Cesium Ion access token
       const cesiumToken = import.meta.env.VITE_CESIUM_ION_ACCESS_TOKEN;
-      if (cesiumToken && cesiumToken !== 'your-cesium-ion-token-here') {
+      if (cesiumToken && cesiumToken !== '') {
         Ion.defaultAccessToken = cesiumToken;
         console.log('Cesium Ion token configured successfully');
       } else {
