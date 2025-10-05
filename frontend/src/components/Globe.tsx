@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
+import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme, Color } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
+import ComparisonModal from "./ComparisonModal";
 import SearchBox from "./SearchBox";
 import { useScreenshot } from "../hooks/useScreenshot";
+import { useComparisonScreenshot } from "../hooks/useComparisonScreenshot";
 import { useFlyToCoords } from "../hooks/useFlyToCoords";
 import { type FlyToCoords } from "../types/FlyToCoords";
 import { addSampleLocations } from "../utils/cesiumHelpers";
@@ -34,8 +36,8 @@ const TILEMATRIX_SET = "GoogleMapsCompatible_Level9";
 const MAX_LEVEL_3857 = 9;
 
 // blend controls
-const BASE_ALPHA = 0.8; // default base map underneath
-const GIBS_ALPHA = 0.9;  // GIBS overlay on top
+const BASE_ALPHA = 0.9; // default base map underneath
+const GIBS_ALPHA = 0.8;  // GIBS overlay on top
 
 function buildGibsProvider3857(layerId: string, time: string, format: "jpg" | "png") {
   const tilingScheme = new WebMercatorTilingScheme();
@@ -65,17 +67,135 @@ const Globe: React.FC<GlobeProps> = ({
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
-
   const [region, setRegion] = useState<string | null>(null);
   const [loadingRegion, setLoadingRegion] = useState(false); 
 
+  // keep layer refs
+  const baseLayerRef = useRef<ImageryLayer | null>(null);
+  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+
+  // UI state
+  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
+  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
+
   // useCesiumViewer({ containerRef: cesiumContainer, viewer });
   useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
-  const { takeScreenshot, downloadScreenshot, closeScreenshotModal } = useScreenshot({
+
+
+  // Get current layer format for screenshots
+  const currentFormat = LAYERS.find(l => l.id === layerId)?.format || "jpg";
+
+  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
+    if (!viewer.current) return;
+    const layers = viewer.current.scene.imageryLayers;
+
+    if (gibsLayerRef.current) {
+      layers.remove(gibsLayerRef.current, false);
+      gibsLayerRef.current = null;
+    }
+
+    const provider = buildGibsProvider3857(id, time, format);
+    const imagery = layers.addImageryProvider(provider); // sits above base
+    imagery.alpha = GIBS_ALPHA;
+
+    // Handle tiles that fail to load or return placeholder images
+    imagery.show = true; // Start visible, hide on errors
+
+    // Smart error tracking with automatic reset
+    let errorCount = 0;
+    let successCount = 0;
+    let lastResetTime = Date.now();
+    let tileRequestCount = 0;
+
+    // Reset error state based on time and success rate
+    const checkAndResetErrorState = () => {
+      const now = Date.now();
+      const timeSinceReset = now - lastResetTime;
+
+      // Reset every 10 seconds OR if success rate improves significantly
+      const successRate = tileRequestCount > 0 ? successCount / tileRequestCount : 0;
+
+      if (timeSinceReset > 10000 || (successRate > 0.5 && errorCount > 0)) {
+        if (errorCount > 0) {
+          console.log(`Resetting GIBS error state: ${errorCount} errors, ${successCount} successes in ${timeSinceReset}ms`);
+          errorCount = 0;
+          successCount = 0;
+          tileRequestCount = 0;
+          imagery.alpha = GIBS_ALPHA; // Reset to full opacity
+        }
+        lastResetTime = now;
+      }
+    };    const originalRequestImage = provider.requestImage?.bind(provider);
+    if (originalRequestImage) {
+      provider.requestImage = function(x: number, y: number, level: number, request?: any) {
+        const promise = originalRequestImage(x, y, level, request);
+        if (promise) {
+          tileRequestCount++;
+
+          promise.then(() => {
+            // Success!
+            successCount++;
+            checkAndResetErrorState();
+          }).catch(() => {
+            // Error - no data available
+            errorCount++;
+
+            // Check if we should reset based on time/success rate
+            checkAndResetErrorState();
+
+            // If still many errors after reset check, reduce visibility
+            if (errorCount > 8 && imagery.alpha > 0.2) {
+              imagery.alpha = Math.max(0.2, imagery.alpha * 0.85);
+              console.log(`GIBS: Reducing opacity to ${imagery.alpha.toFixed(2)} due to ${errorCount} tile errors`);
+            }
+          });
+        }
+        return promise;
+      };
+    }
+
+    gibsLayerRef.current = imagery;
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+    provider.readyPromise?.then(
+      () => {
+        console.info(`[GIBS] Ready: ${id} @ ${time}`);
+        if (imagery) imagery.show = true;
+      },
+      (e: any) => {
+        console.error(`[GIBS] Failed: ${id} @ ${time}`, e);
+        // Hide layer completely when GIBS fails so base layer shows
+        if (imagery) imagery.show = false;
+      }
+    );
+  };
+
+  const { takeScreenshot, downloadScreenshot, closeScreenshotModal, waitForImageryToLoad } = useScreenshot({
       viewer,
       setScreenshotUrl,
       setShowScreenshotModal,
+      applyGibsOverlay,
+      currentLayerId: layerId,
+      currentFormat,
+      currentDateStr: dateStr,
     });
+
+  // Comparison screenshot functionality
+  const {
+    comparisonImages,
+    showComparisonModal,
+    takeComparisonScreenshots,
+    downloadComparisonImages,
+    closeComparisonModal,
+  } = useComparisonScreenshot({
+    viewer,
+    applyGibsOverlay,
+    currentLayerId: layerId,
+    currentFormat,
+    currentDateStr: dateStr,
+    waitForImageryToLoad,
+  });
 
   const handleDownloadScreenshot = () => {
     if (screenshotUrl) {
@@ -91,17 +211,39 @@ const Globe: React.FC<GlobeProps> = ({
     setSearchCoords(data);
   };
 
-  // keep layer refs
-  const baseLayerRef = useRef<ImageryLayer | null>(null);
-  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+  const handleTakeScreenshot = () => {
+    takeScreenshot();
+  };
 
-  // UI state
-  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
-  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
+  const handleRetakeWithDate = async (date: string) => {
+    await takeScreenshot(date);
+  };
+
+  const handleComparisonScreenshot = () => {
+    // Default to current date and a date one year ago
+    const currentDate = new Date().toISOString().slice(0, 10);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const beforeDate = oneYearAgo.toISOString().slice(0, 10);
+
+    takeComparisonScreenshots(beforeDate, currentDate);
+  };
+
+  const handleRetakeComparisonImages = async (beforeDate: string, afterDate: string) => {
+    await takeComparisonScreenshots(beforeDate, afterDate);
+  };
+
+  const handleDownloadComparison = () => {
+    downloadComparisonImages();
+  };
+
+  const handleCloseComparisonModal = () => {
+    closeComparisonModal();
+  };
 
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
-      const token = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
+      const token = (import.meta as { env?: { VITE_CESIUM_ION_ACCESS_TOKEN?: string } }).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
       if (token) Ion.defaultAccessToken = token;
 
       // Do NOT pass imageryProvider; let Viewer attach its default (Ion) based on token.
@@ -150,27 +292,6 @@ const Globe: React.FC<GlobeProps> = ({
     };
   }, []);
 
-  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
-    if (!viewer.current) return;
-    const layers = viewer.current.scene.imageryLayers;
-
-    if (gibsLayerRef.current) {
-      layers.remove(gibsLayerRef.current, false);
-      gibsLayerRef.current = null;
-    }
-
-    const provider = buildGibsProvider3857(id, time, format);
-    const imagery = layers.addImageryProvider(provider); // sits above base
-    imagery.alpha = GIBS_ALPHA;
-    gibsLayerRef.current = imagery;
-
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-expect-error
-    provider.readyPromise?.then(
-      () => console.info(`[GIBS] Ready: ${id} @ ${time}`),
-      (e: any) => console.error(`[GIBS] Failed: ${id} @ ${time}`, e)
-    );
-  };
 
   const applySurface = () => {
     const meta = LAYERS.find(l => l.id === layerId)!;
@@ -202,41 +323,59 @@ const Globe: React.FC<GlobeProps> = ({
 
 
   return (
-  <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
-    {/* Top Right Controls */}
-    <div className="absolute right-4 top-4 z-20 flex flex-col items-end gap-3">
-      <div className="flex items-start gap-3">
-        <SearchBox onResult={handleSearchResult} />
-        <button
-          onClick={takeScreenshot}
-          className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
-          title="Take Screenshot"
-        >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
+      {/* Top Right Controls */}
+      <div className="absolute right-4 top-4 z-20 flex flex-col items-end gap-3">
+        <div className="flex items-start gap-3">
+          <SearchBox onResult={handleSearchResult} />
+          <button
+            onClick={handleTakeScreenshot}
+            className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+            title="Take Screenshot"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-          </svg>
-        </button>
-      </div>
-
-      <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
-        GIBS Surface (EPSG:3857)
-      </div>
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          </button>
+          <button
+            onClick={handleComparisonScreenshot}
+            className="rounded-lg bg-purple-600/90 p-2 text-white transition-all hover:bg-purple-700/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+            title="Take Before/After Comparison"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8V4a1 1 0 011-1h4M20 8V4a1 1 0 00-1-1h-4M4 16v4a1 1 0 001 1h4M20 16v4a1 1 0 01-1 1h-4M9 12h6M12 9l3 3-3 3"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
+          GIBS Surface (EPSG:3857)
+        </div>
 
       <div className="grid gap-1.5 bg-black/70 p-3 rounded-lg backdrop-blur-sm text-white min-w-64">
         {/* Layer & Time Controls */}
@@ -276,12 +415,12 @@ const Globe: React.FC<GlobeProps> = ({
           </div>
         </label>
 
-        <button 
-          onClick={applySurface} 
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
-        >
-          Apply
-        </button>
+          <button
+            onClick={applySurface}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
+          >
+            Apply
+          </button>
 
         <div className="text-xs opacity-70 mt-2">
           Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
@@ -320,15 +459,28 @@ const Globe: React.FC<GlobeProps> = ({
       style={{ width, height }}
     />
 
-    {/* Screenshot Modal */}
-    <ScreenshotModal
-      isOpen={showScreenshotModal}
-      screenshotUrl={screenshotUrl}
-      onClose={handleCloseScreenshotModal}
-      onDownload={handleDownloadScreenshot}
-    />
-  </div>
-);
+      {/* Screenshot Modal */}
+      <ScreenshotModal
+        isOpen={showScreenshotModal}
+        screenshotUrl={screenshotUrl}
+        onClose={handleCloseScreenshotModal}
+        onDownload={handleDownloadScreenshot}
+        onRetakeWithDate={handleRetakeWithDate}
+      />
+
+      {/* Comparison Modal */}
+      <ComparisonModal
+        isOpen={showComparisonModal}
+        beforeImage={comparisonImages?.beforeImage || null}
+        afterImage={comparisonImages?.afterImage || null}
+        beforeDate={comparisonImages?.beforeDate || ''}
+        afterDate={comparisonImages?.afterDate || ''}
+        onClose={handleCloseComparisonModal}
+        onDownload={handleDownloadComparison}
+        onRetakeImages={handleRetakeComparisonImages}
+      />
+    </div>
+  );
 };
 
 export default Globe;

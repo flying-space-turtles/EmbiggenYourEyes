@@ -121,8 +121,24 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       position: Cesium.Cartesian3.fromElements(0, 0, 0),
       ellipsoid: {
         radii: new Cesium.Cartesian3(696340, 696340, 696340),
-        material: Cesium.Color.ORANGE
-      }
+        material: new Cesium.ImageMaterialProperty({
+              image: '/sun_texture.jpg',
+              transparent: false
+        })
+      },
+      label: {
+        text: 'Sun',
+        font: '20pt sans-serif',
+        fillColor: Cesium.Color.YELLOW,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -80), // Position above Sun
+        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scale: 1.0,
+        show: true
+     }
     });
 
     // Planet definitions
@@ -141,7 +157,6 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     const planetEntities: { name: string; entity: Cesium.Entity; distance: number; radius: number; rings?: Cesium.Entity[] }[] = [];
     planets.forEach((p) => {
       let entity;
-      
       if (p.name === 'Earth') {
         entity = viewer.entities.add({
           name: p.name,
@@ -153,71 +168,108 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
 
               transparent: false
             })
-          }
-        });
-      } else if (p.name === 'Mars') {
-        entity = viewer.entities.add({
-          name: p.name,
-          position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
-          ellipsoid: {
-            radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
-            material: new Cesium.ImageMaterialProperty({
-              image: '/mars-texture.svg',
-              transparent: false
-            })
-          }
+          },
+          label: {
+            text: p.name,
+            font: '16pt sans-serif',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -50), // Position above planet
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            scale: 0.8,
+            show: true
+        }
         });
       } else {
-        // Create other planets with solid colors
         entity = viewer.entities.add({
-          name: p.name,
-          position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
-          ellipsoid: {
-            radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
-            material: p.color
-          }
-        });
-      }
-      
-      planetEntities.push({ ...p, entity });
+        name: p.name,
+        position: Cesium.Cartesian3.fromElements(p.distance, 0, 0),
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(p.radius, p.radius, p.radius),
+          material: new Cesium.ImageMaterialProperty({
+            image: `/${p.name.toLowerCase()}_texture.jpg`,
+            transparent: false
+          })
+        },
+        label: {
+          text: p.name,
+          font: '16pt sans-serif',
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -50), // Position above planet
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          scale: 0.8,
+          show: true
+        }
     });
+  }
+    
+      planetEntities.push({ ...p, entity });
+}); 
+
 
     // Add Saturn's rings
     const saturnPlanet = planetEntities.find(p => p.name === 'Saturn');
     if (saturnPlanet) {
-      const saturnRings = viewer.entities.add({
-        name: 'Saturn Rings',
-        position: new Cesium.Cartesian3(saturnPlanet.distance, 0, 0),
-        ellipse: {
-          semiMajorAxis: saturnPlanet.radius * 2.2,
-          semiMinorAxis: saturnPlanet.radius * 2.2,
-          height: 0,
-          material: new Cesium.ColorMaterialProperty(
-            Cesium.Color.fromCssColorString('#D4AF37').withAlpha(0.6)
-          ),
-          outline: true,
-          outlineColor: Cesium.Color.fromCssColorString('#B8860B').withAlpha(0.8),
-          outlineWidth: 2
-        }
-      });
+        const saturnRingPosCallback = (time, result) => {
+            const pos = saturnPlanet.entity.position.getValue(time, result);
+            
+            // Compute Saturn's "up" vector (from origin to center)
+            const up = Cesium.Cartesian3.normalize(pos, new Cesium.Cartesian3());
+            
+            // Move ring slightly above surface along this up vector
+            const offset = saturnPlanet.radius * 10; // 5% above surface
+            return Cesium.Cartesian3.add(pos, Cesium.Cartesian3.multiplyByScalar(up, offset, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+        };
 
-      const saturnInnerRings = viewer.entities.add({
-        name: 'Saturn Inner Rings',
-        position: new Cesium.Cartesian3(saturnPlanet.distance, 0, 0),
-        ellipse: {
-          semiMajorAxis: saturnPlanet.radius * 1.8,
-          semiMinorAxis: saturnPlanet.radius * 1.8,
-          height: 0,
-          material: new Cesium.ColorMaterialProperty(
-            Cesium.Color.fromCssColorString('#DAA520').withAlpha(0.4)
-          ),
-          outline: true,
-          outlineColor: Cesium.Color.fromCssColorString('#B8860B').withAlpha(0.6),
-          outlineWidth: 1
-        }
-      });
+        // Orientation for rings
+        const tiltRad = Cesium.Math.toRadians(26.7); // Saturn's axial tilt
+        const ringOrientationCallback = (time, result) => {
+            const pos = saturnPlanet.entity.position.getValue(time);
+            const hpr = new Cesium.HeadingPitchRoll(0, tiltRad, 0);
+            return Cesium.Transforms.headingPitchRollQuaternion(pos, hpr, Cesium.Ellipsoid.WGS84, Cesium.Transforms.eastNorthUpToFixedFrame, result);
+        };
 
-      saturnPlanet.rings = [saturnRings, saturnInnerRings];
+        // Outer ring
+        const saturnRings = viewer.entities.add({
+            name: 'Saturn Rings Outer',
+            position: new Cesium.CallbackProperty(saturnRingPosCallback, false),
+            orientation: new Cesium.CallbackProperty(ringOrientationCallback, false),
+            ellipse: {
+                semiMajorAxis: saturnPlanet.radius * 2.2,
+                semiMinorAxis: saturnPlanet.radius * 2.2,
+                height: saturnPlanet.radius * 4.6, // lift above Saturn's surface
+                material: new Cesium.ImageMaterialProperty({
+                    image: '/saturn_rings_texture.png', 
+                    transparent: true
+                }),            
+            }
+        });
+
+        // Inner ring
+        const saturnInnerRings = viewer.entities.add({
+            name: 'Saturn Rings Inner',
+            position: new Cesium.CallbackProperty(saturnRingPosCallback, false),
+            orientation: new Cesium.CallbackProperty(ringOrientationCallback, false),
+            ellipse: {
+                semiMajorAxis: saturnPlanet.radius * 1.8,
+                semiMinorAxis: saturnPlanet.radius * 1.8,
+                height: saturnPlanet.radius * 4.61, // lift above Saturn's surface
+                material: new Cesium.ImageMaterialProperty({
+                    image: '/saturn_rings_texture.png', 
+                    transparent: true
+                }),                    
+                outline: false,
+            }
+        });
+
+        saturnPlanet.rings = [saturnRings, saturnInnerRings];
     }
 
     // Add Earth's Moon
@@ -233,7 +285,23 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         ),
         ellipsoid: {
           radii: new Cesium.Cartesian3(30000, 30000, 30000),
-          material: Cesium.Color.LIGHTGRAY
+          material: new Cesium.ImageMaterialProperty({
+              image: '/moon_texture.jpg',
+              transparent: false
+         })
+        },
+        label: {
+          text: 'Moon',
+          font: '14pt sans-serif',
+          fillColor: Cesium.Color.LIGHTGRAY,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -25), // Position above Moon
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          scale: 0.7,
+          show: true
         }
       });
       planetEntities.push({ 
@@ -342,7 +410,8 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       });
       sunEntity.show = true;
       
-      resetCamera(viewer, saturnPlanet || null);
+      const marsPlanet = planets.find(p => p.name === 'Mars');
+      resetCamera(viewer, marsPlanet || null);
       currentPlanetView = null;
       isInFocusMode = false;
       currentPlanetIndex = -1;
@@ -545,18 +614,18 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     };
   }, [navigate, isGlobeView, isMarsView]); // Add navigate, isGlobeView, and isMarsView as dependencies
 
-  const resetCamera = (viewer: Cesium.Viewer, saturnPlanet: { distance: number } | null) => {
-    if (!saturnPlanet) return;
+  const resetCamera = (viewer: Cesium.Viewer, marsPlanet: { distance: number } | null) => {
+    if (!marsPlanet) return;
     
-    const saturnPosition = new Cesium.Cartesian3(saturnPlanet.distance, 0, 0);
-    const cameraPosition = new Cesium.Cartesian3(-3e6, -12e6, 2e6);
+    const marsPosition = new Cesium.Cartesian3(marsPlanet.distance, 0, 0);
+    const cameraPosition = new Cesium.Cartesian3(-2e6, -12e6, 1e6);
     
     viewer.camera.flyTo({
       destination: cameraPosition,
       orientation: {
         direction: Cesium.Cartesian3.normalize(
           Cesium.Cartesian3.subtract(
-            saturnPosition,
+            marsPosition,
             cameraPosition,
             new Cesium.Cartesian3()
           ), 
