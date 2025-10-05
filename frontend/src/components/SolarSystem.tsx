@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
@@ -60,6 +60,64 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       }
     }, 100);
   };
+
+  // Global keyboard handler for solar system navigation
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Only handle keyboard events when we're in solar system view (not globe view)
+    if (isGlobeView) {
+      return;
+    }
+    
+    // Safety check: ensure viewer is available and fully initialized
+    try {
+      if (!viewerRef.current || viewerRef.current.isDestroyed()) {
+        return; // Fail silently when viewer not available
+      }
+      
+      // Try to access clock property safely
+      const clock = viewerRef.current.clock;
+      if (!clock) {
+        return; // Fail silently when clock not available
+      }
+    } catch (error) {
+      return; // Fail silently on any error
+    }
+    
+    // Use the planetNavigation functions if available
+    const planetNav = viewerRef.current.planetNavigation;
+    if (!planetNav) {
+      return;
+    }
+    
+    // Only handle arrow keys when in focus mode
+    if (planetNav.isInFocusMode()) {
+      switch(event.code) {
+        case 'ArrowLeft': 
+          planetNav.goToPrevious(); 
+          event.preventDefault(); 
+          break;
+        case 'ArrowRight': 
+          planetNav.goToNext(); 
+          event.preventDefault(); 
+          break;
+      }
+    }
+    
+    // Handle space key for reset
+    if (event.code === 'Space') {
+      planetNav.resetView();
+      event.preventDefault();
+    }
+  }, [isGlobeView]);
+
+  // Add/remove keyboard listener based on component state
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown, isGlobeView]); // Re-add listener when view state changes
 
   useEffect(() => {
     if (!cesiumContainer.current) return;
@@ -377,12 +435,28 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
     };
 
     const focusOnPlanetByIndex = (index: number) => {
-      const celestialBody = celestialBodies[index];
-      currentPlanetView = celestialBody;
-      
-      const position = celestialBody.entity.position!.getValue(viewer.clock.currentTime);
-      if (position) {
-        focusOnObject(position, celestialBody.radius, celestialBody.name);
+      // Safety check: ensure viewer and clock are available
+      try {
+        if (!viewer || viewer.isDestroyed()) {
+          console.warn('Viewer not available for planet navigation');
+          return;
+        }
+        
+        const clock = viewer.clock;
+        if (!clock) {
+          console.warn('Viewer clock not available for planet navigation');
+          return;
+        }
+        
+        const celestialBody = celestialBodies[index];
+        currentPlanetView = celestialBody;
+        
+        const position = celestialBody.entity.position!.getValue(clock.currentTime);
+        if (position) {
+          focusOnObject(position, celestialBody.radius, celestialBody.name);
+        }
+      } catch (error) {
+        console.warn('Error in planet navigation:', error);
       }
     };
 
@@ -506,28 +580,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       }
     });
 
-    // Keyboard controls for navigation
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (isInFocusMode) {
-        switch(event.code) {
-          case 'ArrowLeft': 
-            goToPreviousPlanet(); 
-            event.preventDefault(); 
-            break;
-          case 'ArrowRight': 
-            goToNextPlanet(); 
-            event.preventDefault(); 
-            break;
-        }
-      }
-      
-      if (event.code === 'Space') {
-        resetToSystemView();
-        event.preventDefault();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
+    // Note: Keyboard handling moved to component level
 
     // Hover effects
     canvas.addEventListener('mousemove', function(event) {
@@ -550,13 +603,21 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         resetView: resetToSystemView,
         isInFocusMode: () => isInFocusMode
       };
+
+      // Return cleanup function (keyboard cleanup moved to component level)
+      return () => {
+        // No cleanup needed here anymore
+      };
     };
 
-    // Call the initialization function
-    initializeSolarSystem(viewer);
+    // Call the initialization function and store cleanup
+    const cleanupSolarSystem = initializeSolarSystem(viewer);
 
     // Cleanup
     return () => {
+      if (cleanupSolarSystem) {
+        cleanupSolarSystem();
+      }
       if (viewerRef.current) {
         viewerRef.current.destroy();
         viewerRef.current = null;
