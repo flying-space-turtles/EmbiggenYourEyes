@@ -68,7 +68,7 @@ const Globe: React.FC<GlobeProps> = ({
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
   const [region, setRegion] = useState<string | null>(null);
-  const [loadingRegion, setLoadingRegion] = useState(false);
+  const [loadingRegion, setLoadingRegion] = useState(false); 
 
   // keep layer refs
   const baseLayerRef = useRef<ImageryLayer | null>(null);
@@ -298,30 +298,7 @@ const Globe: React.FC<GlobeProps> = ({
     applyGibsOverlay(layerId, dateStr, meta.format);
   };
 
-  const viewportCoords = useViewportCenter(viewer);
-
-  const fetchRegion = async () => {
-    if (!viewportCoords) {
-      setRegion("Viewport coordinates are not available.");
-      return;
-    }
-    try {
-      const response = await fetch(`/api/get_region/?lat=${viewportCoords.lat}&lon=${viewportCoords.lon}`);
-      const text = await response.text(); // first get raw text
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        setRegion("Failed to parse backend response: " + text);
-        return;
-      }
-      setRegion(data.region || "Unknown region");
-    } catch (err) {
-      setRegion("Failed to get region: " + err);
-    }
-  };
-
-
+<<<<<<< HEAD
   // Month navigation functions
   const goBackOneMonth = () => {
     if (dateStr === "default") {
@@ -360,6 +337,31 @@ const Globe: React.FC<GlobeProps> = ({
 
     return oneMonthForward > today;
   };
+=======
+  const viewportCoords = useViewportCenter(viewer);
+
+  const fetchRegion = async () => {
+    if (!viewportCoords) {
+      setRegion("Viewport coordinates are not available.");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/get_region/?lat=${viewportCoords.lat}&lon=${viewportCoords.lon}`);
+      const text = await response.text(); // first get raw text
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setRegion("Failed to parse backend response: " + text);
+        return;
+      }
+      setRegion(data.region || "Unknown region");
+    } catch (err) {
+      setRegion("Failed to get region: " + err);
+    }
+  };
+
+>>>>>>> 4fe38bbd49a1dc85f7911d4fc2f9d1018b9acf53
 
   return (
     <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
@@ -431,28 +433,7 @@ const Globe: React.FC<GlobeProps> = ({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Time</span>
-          <div className="flex gap-1.5">
-            <select
-              value={dateStr === "default" ? "default" : "custom"}
-              onChange={(e) =>
-                setDateStr(e.target.value === "default" ? "default" : new Date().toISOString().slice(0, 10))
-              }
-              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="default">default (latest)</option>
-              <option value="custom">custom date</option>
-            </select>
-            <input
-              type="date"
-              value={dateStr === "default" ? "" : dateStr}
-              onChange={(e) => setDateStr(e.target.value || "default")}
-              disabled={dateStr === "default"}
-              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-          </div>
-        </label>
+<<<<<<< HEAD
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium">Time</span>
             <div className="flex gap-1.5">
@@ -496,6 +477,30 @@ const Globe: React.FC<GlobeProps> = ({
               </div>
             )}
           </label>
+=======
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Time</span>
+          <div className="flex gap-1.5">
+            <select
+              value={dateStr === "default" ? "default" : "custom"}
+              onChange={(e) =>
+                setDateStr(e.target.value === "default" ? "default" : new Date().toISOString().slice(0, 10))
+              }
+              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="default">default (latest)</option>
+              <option value="custom">custom date</option>
+            </select>
+            <input
+              type="date"
+              value={dateStr === "default" ? "" : dateStr}
+              onChange={(e) => setDateStr(e.target.value || "default")}
+              disabled={dateStr === "default"}
+              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+        </label>
+>>>>>>> 4fe38bbd49a1dc85f7911d4fc2f9d1018b9acf53
 
           <button
             onClick={applySurface}
@@ -503,9 +508,12 @@ const Globe: React.FC<GlobeProps> = ({
           >
             Apply
           </button>
+<<<<<<< HEAD
+=======
 
         <div className="text-xs opacity-70 mt-2">
           Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
+>>>>>>> 4fe38bbd49a1dc85f7911d4fc2f9d1018b9acf53
         </div>
 
         {viewportCoords && (
@@ -533,8 +541,6 @@ const Globe: React.FC<GlobeProps> = ({
         )}
       </div>
     </div>
-        </div>
-      </div>
 
     {/* Cesium Container */}
     <div
