@@ -135,7 +135,9 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
       baseLayerPicker: false,
       geocoder: false,
       homeButton: false,
-      sceneModePicker: false
+      sceneModePicker: false,
+      fullscreenButton: false,
+      navigationHelpButton: false
     });
 
     viewerRef.current = viewer as ExtendedViewer;
@@ -188,7 +190,7 @@ const SolarSystem: React.FC<SolarSystemProps> = ({
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 3,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(0, -80), // Position above Sun
+        pixelOffset: new Cesium.Cartesian2(0, -120), // Position above Sun
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         scale: 1.0,
