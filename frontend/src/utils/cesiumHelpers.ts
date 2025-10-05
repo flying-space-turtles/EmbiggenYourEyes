@@ -8,7 +8,6 @@ export const addSampleLocations = (cesiumViewer: Viewer): void => {
     { name: 'NASA Johnson Space Center', lat: 29.5591, lon: -95.0907 },
     { name: 'NASA Jet Propulsion Laboratory', lat: 34.2048, lon: -118.1711 },
     { name: 'NASA Ames Research Center', lat: 37.4143, lon: -122.0574 },
-    { name: 'Jakobshavn Isbræ (Sermeq Kujalleq)', lat: 69.1667, lon: -49.9167 },
     { name: 'Kīlauea, Hawaii, USA', lat: 19.4069, lon: -155.2834 },
     { name: 'Mount Etna, Italy', lat: 37.7510, lon: 14.9934 },
     { name: 'Nyiragongo, DR Congo', lat: -1.52, lon: 29.25 },

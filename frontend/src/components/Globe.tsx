@@ -216,30 +216,22 @@ const Globe: React.FC<GlobeProps> = ({
     setSearchCoords(data);
   };
 
-  const handleTakeScreenshot = async () => {
-    hideLabels();
-    await new Promise(resolve => setTimeout(resolve, 50));
-    await takeScreenshot();
-    showLabels();
+  const handleTakeScreenshot = () => {
+    takeScreenshot();
   };
 
   const handleRetakeWithDate = async (date: string) => {
     await takeScreenshot(date);
   };
 
-  const handleComparisonScreenshot = async () => {
-    hideLabels();
-
+  const handleComparisonScreenshot = () => {
     // Default to current date and a date one year ago
     const currentDate = new Date().toISOString().slice(0, 10);
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const beforeDate = oneYearAgo.toISOString().slice(0, 10);
 
-    await new Promise(resolve => setTimeout(resolve, 50));
-    await takeComparisonScreenshots(beforeDate, currentDate);
-
-    showLabels();
+    takeComparisonScreenshots(beforeDate, currentDate);
   };
 
   const handleRetakeComparisonImages = async (beforeDate: string, afterDate: string) => {
