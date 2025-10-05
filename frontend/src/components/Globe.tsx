@@ -527,9 +527,6 @@ const Globe: React.FC<GlobeProps> = ({
 
 
         </div>
-        <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
-          GIBS Surface (EPSG:3857)
-        </div>
 
       <div className="grid gap-1.5 bg-black/70 p-3 rounded-lg backdrop-blur-sm text-white min-w-64">
         {/* Layer & Time Controls */}
@@ -597,35 +594,49 @@ const Globe: React.FC<GlobeProps> = ({
           >
             Apply
           </button>
-
-        {viewportBounds && (
-          <div className="text-xs text-white mt-2 bg-black/60 px-2 py-1 rounded">
-            Viewport Center: {getViewportCenter(viewportBounds).lat.toFixed(3)}°, {getViewportCenter(viewportBounds).lon.toFixed(3)}°
-          </div>
-        )}
       </div>
 
-      {/* Region/AI Panel under the other controls */}
-      <div className="w-80 max-w-xs mt-2 p-3 bg-black/70 text-white rounded-lg shadow-lg backdrop-blur-sm border border-gray-600/30">
+      {/* Gemini AI Button */}
+      <div className="mt-2 relative group">
         <button
           onClick={askGeminiAboutRegion}
           disabled={loadingGemini}
-          className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors text-sm disabled:opacity-50"
+          className="rounded-lg bg-black/70 p-2.5 text-purple-300 transition-all hover:bg-black/90 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loadingGemini ? "Asking Gemini..." : "🤖 Ask Gemini About This Region"}
+          <svg 
+            className="h-6 w-6"
+            viewBox="0 0 512 512" 
+            fill="currentColor"
+          >
+            {/* Large sparkle */}
+            <path d="M208 64c0-8.8 7.2-16 16-16s16 7.2 16 16c0 33.1 26.9 60 60 60c8.8 0 16 7.2 16 16s-7.2 16-16 16c-33.1 0-60 26.9-60 60c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-33.1-26.9-60-60-60c-8.8 0-16-7.2-16-16s7.2-16 16-16c33.1 0 60-26.9 60-60z"/>
+            {/* Medium sparkle */}
+            <path d="M384 192c0-8.8 7.2-16 16-16s16 7.2 16 16c0 19.9 16.1 36 36 36c8.8 0 16 7.2 16 16s-7.2 16-16 16c-19.9 0-36 16.1-36 36c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-19.9-16.1-36-36-36c-8.8 0-16-7.2-16-16s7.2-16 16-16c19.9 0 36-16.1 36-36z"/>
+            {/* Small sparkle */}
+            <path d="M112 352c0-8.8 7.2-16 16-16s16 7.2 16 16c0 11 9 20 20 20c8.8 0 16 7.2 16 16s-7.2 16-16 16c-11 0-20 9-20 20c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-11-9-20-20-20c-8.8 0-16-7.2-16-16s7.2-16 16-16c11 0 20-9 20-20z"/>
+          </svg>
         </button>
+        
+        {/* Tooltip */}
+        <div className="absolute right-full top-1/2 transform -translate-y-1/2 mr-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+          Ask Gemini AI about this region
+          <div className="absolute left-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-900"></div>
+        </div>
+      </div>
 
-        {region && (
-          <div className="mt-3 p-2 bg-black/30 rounded text-sm">
+      {/* Region info panel (if available) */}
+      {region && (
+        <div className="w-80 max-w-xs mt-2 p-3 bg-black/70 text-white rounded-lg shadow-lg backdrop-blur-sm border border-gray-600/30">
+          <div className="p-2 bg-black/30 rounded text-sm">
             <span className="font-medium text-gray-300">Current region:</span>
             <p className="mt-1 text-gray-100">{region}</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Gemini Response Panel */}
       {(geminiResponse || loadingGemini) && (
-        <div className="w-80 max-w-xs">
+        <div className="w-80 max-w-xs h-[32rem]">
           <GeminiResponsePanel
             response={geminiResponse || ''}
             isLoading={loadingGemini}
