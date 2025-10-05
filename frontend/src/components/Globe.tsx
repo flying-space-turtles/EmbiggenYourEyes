@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme, Color } from "cesium";
+import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
 import ComparisonModal from "./ComparisonModal";
@@ -471,31 +471,6 @@ const Globe: React.FC<GlobeProps> = ({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Time</span>
-          <div className="flex gap-1.5">
-            <select
-              value={dateStr === "default" ? "default" : "custom"}
-              onChange={(e) =>
-                setDateStr(e.target.value === "default" ? "default" : new Date().toISOString().slice(0, 10))
-              }
-              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="default">default (latest)</option>
-              <option value="custom">custom date</option>
-            </select>
-            <input
-              type="date"
-              value={dateStr === "default" ? "" : dateStr}
-              onChange={(e) => setDateStr(e.target.value || "default")}
-              disabled={dateStr === "default"}
-              className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-          </div>
-        </label>
-
-
-
-          <label className="flex flex-col gap-1">
             <span className="text-sm font-medium">Time</span>
             <div className="flex gap-1.5">
               <select
