@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Cartesian3, Credit, ImageryLayer, Ion, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
+import { Cartesian3, ConstantProperty, Credit, ImageryLayer, Ion, ScreenSpaceEventType, UrlTemplateImageryProvider, Viewer, WebMapTileServiceImageryProvider, WebMercatorTilingScheme } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ScreenshotModal from "./ScreenshotModal";
+import ComparisonModal from "./ComparisonModal";
 import SearchBox from "./SearchBox";
+import GeminiResponsePanel from "./GeminiResponsePanel";
 import { useScreenshot } from "../hooks/useScreenshot";
+import { useComparisonScreenshot } from "../hooks/useComparisonScreenshot";
 import { useFlyToCoords } from "../hooks/useFlyToCoords";
 import { type FlyToCoords } from "../types/FlyToCoords";
 import { addSampleLocations } from "../utils/cesiumHelpers";
+import { useViewportCenter } from "../hooks/useViewportCenter";
 
 interface GlobeProps {
   width?: string;
@@ -33,8 +37,8 @@ const TILEMATRIX_SET = "GoogleMapsCompatible_Level9";
 const MAX_LEVEL_3857 = 9;
 
 // blend controls
-const BASE_ALPHA = 0.8; // default base map underneath
-const GIBS_ALPHA = 0.9;  // GIBS overlay on top
+const BASE_ALPHA = 0.9; // default base map underneath
+const GIBS_ALPHA = 0.8;  // GIBS overlay on top
 
 function buildGibsProvider3857(layerId: string, time: string, format: "jpg" | "png") {
   const tilingScheme = new WebMercatorTilingScheme();
@@ -64,14 +68,137 @@ const Globe: React.FC<GlobeProps> = ({
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
+  const [region, setRegion] = useState<string | null>(null);
+  const [geminiResponse, setGeminiResponse] = useState<string | null>(null);
+  const [loadingGemini, setLoadingGemini] = useState(false);
+
+
+  // keep layer refs
+  const baseLayerRef = useRef<ImageryLayer | null>(null);
+  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+
+  // UI state
+  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
+  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
 
   // useCesiumViewer({ containerRef: cesiumContainer, viewer });
   useFlyToCoords({ viewer, flyToCoords: flyToCoords || searchCoords });
-  const { takeScreenshot, downloadScreenshot, closeScreenshotModal } = useScreenshot({
+
+
+  // Get current layer format for screenshots
+  const currentFormat = LAYERS.find(l => l.id === layerId)?.format || "jpg";
+
+  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
+    if (!viewer.current) return;
+    const layers = viewer.current.scene.imageryLayers;
+
+    if (gibsLayerRef.current) {
+      layers.remove(gibsLayerRef.current, false);
+      gibsLayerRef.current = null;
+    }
+
+    const provider = buildGibsProvider3857(id, time, format);
+    const imagery = layers.addImageryProvider(provider); // sits above base
+    imagery.alpha = GIBS_ALPHA;
+
+    // Handle tiles that fail to load or return placeholder images
+    imagery.show = true; // Start visible, hide on errors
+
+    // Smart error tracking with automatic reset
+    let errorCount = 0;
+    let successCount = 0;
+    let lastResetTime = Date.now();
+    let tileRequestCount = 0;
+
+    // Reset error state based on time and success rate
+    const checkAndResetErrorState = () => {
+      const now = Date.now();
+      const timeSinceReset = now - lastResetTime;
+
+      // Reset every 10 seconds OR if success rate improves significantly
+      const successRate = tileRequestCount > 0 ? successCount / tileRequestCount : 0;
+
+      if (timeSinceReset > 10000 || (successRate > 0.5 && errorCount > 0)) {
+        if (errorCount > 0) {
+          console.log(`Resetting GIBS error state: ${errorCount} errors, ${successCount} successes in ${timeSinceReset}ms`);
+          errorCount = 0;
+          successCount = 0;
+          tileRequestCount = 0;
+          imagery.alpha = GIBS_ALPHA; // Reset to full opacity
+        }
+        lastResetTime = now;
+      }
+    };    const originalRequestImage = provider.requestImage?.bind(provider);
+    if (originalRequestImage) {
+      provider.requestImage = function(x: number, y: number, level: number, request?: any) {
+        const promise = originalRequestImage(x, y, level, request);
+        if (promise) {
+          tileRequestCount++;
+
+          promise.then(() => {
+            // Success!
+            successCount++;
+            checkAndResetErrorState();
+          }).catch(() => {
+            // Error - no data available
+            errorCount++;
+
+            // Check if we should reset based on time/success rate
+            checkAndResetErrorState();
+
+            // If still many errors after reset check, reduce visibility
+            if (errorCount > 8 && imagery.alpha > 0.2) {
+              imagery.alpha = Math.max(0.2, imagery.alpha * 0.85);
+              console.log(`GIBS: Reducing opacity to ${imagery.alpha.toFixed(2)} due to ${errorCount} tile errors`);
+            }
+          });
+        }
+        return promise;
+      };
+    }
+
+    gibsLayerRef.current = imagery;
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+    provider.readyPromise?.then(
+      () => {
+        console.info(`[GIBS] Ready: ${id} @ ${time}`);
+        if (imagery) imagery.show = true;
+      },
+      (e: any) => {
+        console.error(`[GIBS] Failed: ${id} @ ${time}`, e);
+        // Hide layer completely when GIBS fails so base layer shows
+        if (imagery) imagery.show = false;
+      }
+    );
+  };
+
+  const { takeScreenshot, downloadScreenshot, closeScreenshotModal, waitForImageryToLoad } = useScreenshot({
       viewer,
       setScreenshotUrl,
       setShowScreenshotModal,
+      applyGibsOverlay,
+      currentLayerId: layerId,
+      currentFormat,
+      currentDateStr: dateStr,
     });
+
+  // Comparison screenshot functionality
+  const {
+    comparisonImages,
+    showComparisonModal,
+    takeComparisonScreenshots,
+    downloadComparisonImages,
+    closeComparisonModal,
+  } = useComparisonScreenshot({
+    viewer,
+    applyGibsOverlay,
+    currentLayerId: layerId,
+    currentFormat,
+    currentDateStr: dateStr,
+    waitForImageryToLoad,
+  });
 
   const handleDownloadScreenshot = () => {
     if (screenshotUrl) {
@@ -87,17 +214,87 @@ const Globe: React.FC<GlobeProps> = ({
     setSearchCoords(data);
   };
 
-  // keep layer refs
-  const baseLayerRef = useRef<ImageryLayer | null>(null);
-  const gibsLayerRef = useRef<ImageryLayer | null>(null);
+  const handleTakeScreenshot = () => {
+    takeScreenshot();
+  };
 
-  // UI state
-  const [layerId, setLayerId] = useState<string>(LAYERS[0].id);
-  const [dateStr, setDateStr] = useState<string>("default"); // "default" or "YYYY-MM-DD"
+  const handleRetakeWithDate = async (date: string) => {
+    await takeScreenshot(date);
+  };
+
+  const handleComparisonScreenshot = () => {
+    // Default to current date and a date one year ago
+    const currentDate = new Date().toISOString().slice(0, 10);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const beforeDate = oneYearAgo.toISOString().slice(0, 10);
+
+    takeComparisonScreenshots(beforeDate, currentDate);
+  };
+
+  const handleRetakeComparisonImages = async (beforeDate: string, afterDate: string) => {
+    await takeComparisonScreenshots(beforeDate, afterDate);
+  };
+
+  const handleDownloadComparison = () => {
+    downloadComparisonImages();
+  };
+
+  const handleCloseComparisonModal = () => {
+    closeComparisonModal();
+  };
+
+  const toggleLabels = () => {
+      viewer.current?.entities.values.forEach(entity => {
+        if (entity.point) {
+          const currentPoint = (entity.point.show instanceof ConstantProperty)
+            ? entity.point.show.getValue()
+            : true;
+          entity.point.show = new ConstantProperty(!currentPoint);
+        }
+
+        if (entity.label) {
+          const currentLabel = (entity.label.show instanceof ConstantProperty)
+            ? entity.label.show.getValue()
+            : true;
+          entity.label.show = new ConstantProperty(!currentLabel);
+        }
+      });
+
+      viewer.current?.scene.requestRender(); // force redraw
+    };
+
+  const hideLabels = () => {
+    viewer.current?.entities.values.forEach(entity => {
+        if (entity.point) {
+          entity.point.show = new ConstantProperty(false);
+        }
+
+        if (entity.label) {
+          entity.label.show = new ConstantProperty(false);
+        }
+      });
+
+      viewer.current?.scene.requestRender(); // force redraw
+    };
+  
+    const showLabels = () => {
+    viewer.current?.entities.values.forEach(entity => {
+        if (entity.point) {
+          entity.point.show = new ConstantProperty(true);
+        }
+
+        if (entity.label) {
+          entity.label.show = new ConstantProperty(true);
+        }
+      });
+
+      viewer.current?.scene.requestRender(); // force redraw
+    };
 
   useEffect(() => {
     if (cesiumContainer.current && !viewer.current) {
-      const token = (import.meta as any).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
+      const token = (import.meta as { env?: { VITE_CESIUM_ION_ACCESS_TOKEN?: string } }).env?.VITE_CESIUM_ION_ACCESS_TOKEN;
       if (token) Ion.defaultAccessToken = token;
 
       // Do NOT pass imageryProvider; let Viewer attach its default (Ion) based on token.
@@ -137,6 +334,28 @@ const Globe: React.FC<GlobeProps> = ({
         orientation: { heading: 0, pitch: -1.57, roll: 0 },
       });
 
+      // Disable entity selection to prevent camera disruption
+      // Use setTimeout to ensure viewer is fully initialized
+      setTimeout(() => {
+        try {
+          if (viewer.current && viewer.current.cesiumWidget && viewer.current.cesiumWidget.screenSpaceEventHandler) {
+            // Override the default left click behavior to prevent entity selection
+            viewer.current.cesiumWidget.screenSpaceEventHandler.setInputAction(() => {
+              // Do nothing - this prevents the default click behavior
+            }, ScreenSpaceEventType.LEFT_CLICK);
+            
+            // Override double click to prevent any zoom/selection behavior
+            viewer.current.cesiumWidget.screenSpaceEventHandler.setInputAction(() => {
+              // Do nothing - this prevents the default double-click behavior
+            }, ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+            
+            console.log("Successfully disabled entity selection");
+          }
+        } catch (error) {
+          console.warn("Could not disable entity selection:", error);
+        }
+      }, 100); // Small delay to ensure initialization
+
       addSampleLocations(viewer.current);
     }
 
@@ -146,32 +365,108 @@ const Globe: React.FC<GlobeProps> = ({
     };
   }, []);
 
-  const applyGibsOverlay = (id: string, time: string, format: "jpg" | "png") => {
-    if (!viewer.current) return;
-    const layers = viewer.current.scene.imageryLayers;
-
-    if (gibsLayerRef.current) {
-      layers.remove(gibsLayerRef.current, false);
-      gibsLayerRef.current = null;
-    }
-
-    const provider = buildGibsProvider3857(id, time, format);
-    const imagery = layers.addImageryProvider(provider); // sits above base
-    imagery.alpha = GIBS_ALPHA;
-    gibsLayerRef.current = imagery;
-
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-expect-error
-    provider.readyPromise?.then(
-      () => console.info(`[GIBS] Ready: ${id} @ ${time}`),
-      (e: any) => console.error(`[GIBS] Failed: ${id} @ ${time}`, e)
-    );
-  };
 
   const applySurface = () => {
     const meta = LAYERS.find(l => l.id === layerId)!;
     applyGibsOverlay(layerId, dateStr, meta.format);
   };
+
+  const viewportBounds = useViewportCenter(viewer);
+
+  // Helper function to calculate center from viewport bounds
+  const getViewportCenter = (bounds: NonNullable<typeof viewportBounds>) => {
+    return {
+      lat: (bounds.topLeft.lat + bounds.topRight.lat + bounds.bottomLeft.lat + bounds.bottomRight.lat) / 4,
+      lon: (bounds.topLeft.lon + bounds.topRight.lon + bounds.bottomLeft.lon + bounds.bottomRight.lon) / 4,
+    };
+  };
+
+  const askGeminiAboutRegion = async () => {
+    if (!viewportBounds) {
+      setGeminiResponse("Viewport coordinates are not available.");
+      return;
+    }
+
+    setLoadingGemini(true);
+
+    // Build URL with all 4 corner coordinates (same as other functions)
+    const params = new URLSearchParams({
+      top_left_lat: viewportBounds.topLeft.lat.toString(),
+      top_left_lon: viewportBounds.topLeft.lon.toString(),
+      top_right_lat: viewportBounds.topRight.lat.toString(),
+      top_right_lon: viewportBounds.topRight.lon.toString(),
+      bottom_left_lat: viewportBounds.bottomLeft.lat.toString(),
+      bottom_left_lon: viewportBounds.bottomLeft.lon.toString(),
+      bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
+      bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
+    });
+
+    try {
+      const response = await fetch(`/api/ask_gemini/?${params}`);
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setGeminiResponse("Failed to parse backend response: " + text);
+        return;
+      }
+
+      if (data.historical_info) {
+        setGeminiResponse(data.historical_info);
+        console.log("Gemini response received from:", data.model_used);
+        console.log("Location context:", data.location_context);
+      } else if (data.error) {
+        setGeminiResponse("Error: " + data.error);
+      } else {
+        setGeminiResponse("No response received from Gemini");
+      }
+    } catch (err) {
+      setGeminiResponse("Failed to get response from Gemini: " + err);
+    } finally {
+      setLoadingGemini(false);
+    }
+  };
+
+  // Month navigation functions
+  const goBackOneMonth = () => {
+    if (dateStr === "default") {
+      // If default, start from today and go back one month
+      const today = new Date();
+      const oneMonthBack = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+      setDateStr(oneMonthBack.toISOString().slice(0, 10));
+    } else {
+      // Go back one month from current date
+      const currentDate = new Date(dateStr);
+      const oneMonthBack = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, currentDate.getDate());
+      setDateStr(oneMonthBack.toISOString().slice(0, 10));
+    }
+  };
+
+  const goForwardOneMonth = () => {
+    if (dateStr === "default") return; // Can't go forward from "default" (latest)
+
+    const currentDate = new Date(dateStr);
+    const oneMonthForward = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+    const today = new Date();
+
+    // Don't allow going beyond today
+    if (oneMonthForward <= today) {
+      setDateStr(oneMonthForward.toISOString().slice(0, 10));
+    }
+  };
+
+  // Check if forward button should be disabled
+  const isForwardDisabled = () => {
+    if (dateStr === "default") return true;
+
+    const currentDate = new Date(dateStr);
+    const oneMonthForward = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+    const today = new Date();
+
+    return oneMonthForward > today;
+  };
+
 
   return (
     <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
@@ -180,7 +475,7 @@ const Globe: React.FC<GlobeProps> = ({
         <div className="flex items-start gap-3">
           <SearchBox onResult={handleSearchResult} />
           <button
-            onClick={takeScreenshot}
+            onClick={handleTakeScreenshot}
             className="rounded-lg bg-black/70 p-2 text-white transition-all hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
             title="Take Screenshot"
           >
@@ -204,26 +499,51 @@ const Globe: React.FC<GlobeProps> = ({
               />
             </svg>
           </button>
-        </div>
-        <div className="font-semibold mb-1.5 text-white bg-black/70 p-2 rounded-lg backdrop-blur-sm">
-          GIBS Surface (EPSG:3857)
-        </div>
-
-        <div className="grid gap-1.5 bg-black/70 p-3 rounded-lg backdrop-blur-sm text-white min-w-64">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Layer</span>
-            <select
-              value={layerId}
-              onChange={(e) => setLayerId(e.target.value)}
-              className="w-full p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+          <button
+            onClick={handleComparisonScreenshot}
+            className="rounded-lg bg-purple-600/90 p-2 text-white transition-all hover:bg-purple-700/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+            title="Take Before/After Comparison"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              {LAYERS.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </label>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8V4a1 1 0 011-1h4M20 8V4a1 1 0 00-1-1h-4M4 16v4a1 1 0 001 1h4M20 16v4a1 1 0 01-1 1h-4M9 12h6M12 9l3 3-3 3"
+              />
+            </svg>
+          </button>
 
-          <label className="flex flex-col gap-1">
+
+
+          <button onClick={toggleLabels} className="rounded-lg bg-blue-600/80 p-2 text-white transition-all 
+          hover:bg-blue-700/80 focus:outline-none focus:ring-2 focus:ring-white/50" title="Toggle Labels">🏷️</button>
+
+
+
+        </div>
+
+      <div className="grid gap-1.5 bg-black/70 p-3 rounded-lg backdrop-blur-sm text-white min-w-64">
+        {/* Layer & Time Controls */}
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Layer</span>
+          <select
+            value={layerId}
+            onChange={(e) => setLayerId(e.target.value)}
+            className="w-full p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+          >
+            {LAYERS.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
             <span className="text-sm font-medium">Time</span>
             <div className="flex gap-1.5">
               <select
@@ -244,37 +564,120 @@ const Globe: React.FC<GlobeProps> = ({
                 className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
+
+            {/* Month Navigation Buttons */}
+            {dateStr !== "default" && (
+              <div className="flex gap-1.5 mt-1">
+                <button
+                  onClick={goBackOneMonth}
+                  className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors text-sm font-medium"
+                  title="Go back 1 month"
+                >
+                  ← 1 Month
+                </button>
+                <button
+                  onClick={goForwardOneMonth}
+                  disabled={isForwardDisabled()}
+                  className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-700"
+                  title="Go forward 1 month"
+                >
+                  1 Month →
+                </button>
+              </div>
+            )}
+
           </label>
 
-          <button 
-            onClick={applySurface} 
+          <button
+            onClick={applySurface}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-medium"
           >
             Apply
           </button>
+      </div>
 
-          <div className="text-xs opacity-70 mt-2">
-            Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
-          </div>
+      {/* Gemini AI Button */}
+      <div className="mt-2 relative group">
+        <button
+          onClick={askGeminiAboutRegion}
+          disabled={loadingGemini}
+          className="rounded-lg bg-black/70 p-2.5 text-purple-300 transition-all hover:bg-black/90 hover:text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg 
+            className="h-6 w-6"
+            viewBox="0 0 512 512" 
+            fill="currentColor"
+          >
+            {/* Large sparkle */}
+            <path d="M208 64c0-8.8 7.2-16 16-16s16 7.2 16 16c0 33.1 26.9 60 60 60c8.8 0 16 7.2 16 16s-7.2 16-16 16c-33.1 0-60 26.9-60 60c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-33.1-26.9-60-60-60c-8.8 0-16-7.2-16-16s7.2-16 16-16c33.1 0 60-26.9 60-60z"/>
+            {/* Medium sparkle */}
+            <path d="M384 192c0-8.8 7.2-16 16-16s16 7.2 16 16c0 19.9 16.1 36 36 36c8.8 0 16 7.2 16 16s-7.2 16-16 16c-19.9 0-36 16.1-36 36c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-19.9-16.1-36-36-36c-8.8 0-16-7.2-16-16s7.2-16 16-16c19.9 0 36-16.1 36-36z"/>
+            {/* Small sparkle */}
+            <path d="M112 352c0-8.8 7.2-16 16-16s16 7.2 16 16c0 11 9 20 20 20c8.8 0 16 7.2 16 16s-7.2 16-16 16c-11 0-20 9-20 20c0 8.8-7.2 16-16 16s-16-7.2-16-16c0-11-9-20-20-20c-8.8 0-16-7.2-16-16s7.2-16 16-16c11 0 20-9 20-20z"/>
+          </svg>
+        </button>
+        
+        {/* Tooltip */}
+        <div className="absolute right-full top-1/2 transform -translate-y-1/2 mr-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+          Ask Gemini AI about this region
+          <div className="absolute left-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-900"></div>
         </div>
       </div>
 
-      {/* Cesium Container */}
-      <div
-        ref={cesiumContainer}
-        className="overflow-hidden w-full h-full"
-        style={{ width, height }}
-      />
+      {/* Region info panel (if available) */}
+      {region && (
+        <div className="w-80 max-w-xs mt-2 p-3 bg-black/70 text-white rounded-lg shadow-lg backdrop-blur-sm border border-gray-600/30">
+          <div className="p-2 bg-black/30 rounded text-sm">
+            <span className="font-medium text-gray-300">Current region:</span>
+            <p className="mt-1 text-gray-100">{region}</p>
+          </div>
+        </div>
+      )}
 
-      {/* Screenshot Modal */}
-      <ScreenshotModal
-        isOpen={showScreenshotModal}
-        screenshotUrl={screenshotUrl}
-        onClose={handleCloseScreenshotModal}
-        onDownload={handleDownloadScreenshot}
-      />
+      {/* Gemini Response Panel */}
+      {(geminiResponse || loadingGemini) && (
+        <div className="w-80 max-w-xs h-[32rem]">
+          <GeminiResponsePanel
+            response={geminiResponse || ''}
+            isLoading={loadingGemini}
+            onClose={() => setGeminiResponse(null)}
+          />
+        </div>
+      )}
+    </div>
+
+    {/* Cesium Container */}
+    <div
+      ref={cesiumContainer}
+      className="overflow-hidden w-full h-full"
+      style={{ width, height }}
+    />
+
+    {/* Screenshot Modal */}
+    <ScreenshotModal
+      isOpen={showScreenshotModal}
+      screenshotUrl={screenshotUrl}
+      onClose={handleCloseScreenshotModal}
+      onDownload={handleDownloadScreenshot}
+      onRetakeWithDate={handleRetakeWithDate}
+    />
+
+    {/* Comparison Modal */}
+    <ComparisonModal
+      isOpen={showComparisonModal}
+      beforeImage={comparisonImages?.beforeImage || null}
+      afterImage={comparisonImages?.afterImage || null}
+      beforeDate={comparisonImages?.beforeDate || ''}
+      afterDate={comparisonImages?.afterDate || ''}
+      onClose={handleCloseComparisonModal}
+      onDownload={handleDownloadComparison}
+      onRetakeImages={handleRetakeComparisonImages}
+    />
     </div>
   );
 };
 
 export default Globe;
+
+
+
