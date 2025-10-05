@@ -295,6 +295,45 @@ const Globe: React.FC<GlobeProps> = ({
     applyGibsOverlay(layerId, dateStr, meta.format);
   };
 
+  // Month navigation functions
+  const goBackOneMonth = () => {
+    if (dateStr === "default") {
+      // If default, start from today and go back one month
+      const today = new Date();
+      const oneMonthBack = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+      setDateStr(oneMonthBack.toISOString().slice(0, 10));
+    } else {
+      // Go back one month from current date
+      const currentDate = new Date(dateStr);
+      const oneMonthBack = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, currentDate.getDate());
+      setDateStr(oneMonthBack.toISOString().slice(0, 10));
+    }
+  };
+
+  const goForwardOneMonth = () => {
+    if (dateStr === "default") return; // Can't go forward from "default" (latest)
+
+    const currentDate = new Date(dateStr);
+    const oneMonthForward = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+    const today = new Date();
+
+    // Don't allow going beyond today
+    if (oneMonthForward <= today) {
+      setDateStr(oneMonthForward.toISOString().slice(0, 10));
+    }
+  };
+
+  // Check if forward button should be disabled
+  const isForwardDisabled = () => {
+    if (dateStr === "default") return true;
+
+    const currentDate = new Date(dateStr);
+    const oneMonthForward = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+    const today = new Date();
+
+    return oneMonthForward > today;
+  };
+
   return (
     <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
       {/* Top Right Controls */}
@@ -385,6 +424,27 @@ const Globe: React.FC<GlobeProps> = ({
                 className="flex-1 p-2 rounded bg-gray-800 text-white border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
+
+            {/* Month Navigation Buttons */}
+            {dateStr !== "default" && (
+              <div className="flex gap-1.5 mt-1">
+                <button
+                  onClick={goBackOneMonth}
+                  className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors text-sm font-medium"
+                  title="Go back 1 month"
+                >
+                  ← 1 Month
+                </button>
+                <button
+                  onClick={goForwardOneMonth}
+                  disabled={isForwardDisabled()}
+                  className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-700"
+                  title="Go forward 1 month"
+                >
+                  1 Month →
+                </button>
+              </div>
+            )}
           </label>
 
           <button
@@ -393,10 +453,6 @@ const Globe: React.FC<GlobeProps> = ({
           >
             Apply
           </button>
-
-          <div className="text-xs opacity-70 mt-2">
-            Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
-          </div>
         </div>
       </div>
 
