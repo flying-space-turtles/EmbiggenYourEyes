@@ -70,6 +70,7 @@ const Globe: React.FC<GlobeProps> = ({
   const [region, setRegion] = useState<string | null>(null);
   const [loadingRegion, setLoadingRegion] = useState(false);
 
+
   // keep layer refs
   const baseLayerRef = useRef<ImageryLayer | null>(null);
   const gibsLayerRef = useRef<ImageryLayer | null>(null);
@@ -361,6 +362,7 @@ const Globe: React.FC<GlobeProps> = ({
     return oneMonthForward > today;
   };
 
+
   return (
     <div ref={containerDiv} className="relative w-full h-full" style={{ width, height }}>
       {/* Top Right Controls */}
@@ -453,6 +455,9 @@ const Globe: React.FC<GlobeProps> = ({
             />
           </div>
         </label>
+
+
+
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium">Time</span>
             <div className="flex gap-1.5">
@@ -495,6 +500,7 @@ const Globe: React.FC<GlobeProps> = ({
                 </button>
               </div>
             )}
+
           </label>
 
           <button
