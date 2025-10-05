@@ -69,6 +69,10 @@ const Globe: React.FC<GlobeProps> = ({
   const [searchCoords, setSearchCoords] = useState<FlyToCoords | null>(null);
   const [region, setRegion] = useState<string | null>(null);
   const [loadingRegion, setLoadingRegion] = useState(false);
+  const [historicalPrompt, setHistoricalPrompt] = useState<string | null>(null);
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
+  const [geminiResponse, setGeminiResponse] = useState<string | null>(null);
+  const [loadingGemini, setLoadingGemini] = useState(false);
 
 
   // keep layer refs
@@ -299,15 +303,38 @@ const Globe: React.FC<GlobeProps> = ({
     applyGibsOverlay(layerId, dateStr, meta.format);
   };
 
-  const viewportCoords = useViewportCenter(viewer);
+  const viewportBounds = useViewportCenter(viewer);
+
+  // Helper function to calculate center from viewport bounds
+  const getViewportCenter = (bounds: NonNullable<typeof viewportBounds>) => {
+    return {
+      lat: (bounds.topLeft.lat + bounds.topRight.lat + bounds.bottomLeft.lat + bounds.bottomRight.lat) / 4,
+      lon: (bounds.topLeft.lon + bounds.topRight.lon + bounds.bottomLeft.lon + bounds.bottomRight.lon) / 4,
+    };
+  };
 
   const fetchRegion = async () => {
-    if (!viewportCoords) {
+    if (!viewportBounds) {
       setRegion("Viewport coordinates are not available.");
       return;
     }
+    
+    setLoadingRegion(true);
+    
+    // Build URL with all 4 corner coordinates
+    const params = new URLSearchParams({
+      top_left_lat: viewportBounds.topLeft.lat.toString(),
+      top_left_lon: viewportBounds.topLeft.lon.toString(),
+      top_right_lat: viewportBounds.topRight.lat.toString(),
+      top_right_lon: viewportBounds.topRight.lon.toString(),
+      bottom_left_lat: viewportBounds.bottomLeft.lat.toString(),
+      bottom_left_lon: viewportBounds.bottomLeft.lon.toString(),
+      bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
+      bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
+    });
+                      
     try {
-      const response = await fetch(`/api/get_region/?lat=${viewportCoords.lat}&lon=${viewportCoords.lon}`);
+      const response = await fetch(`/api/get_region/?${params}`);
       const text = await response.text(); // first get raw text
       let data;
       try {
@@ -316,12 +343,119 @@ const Globe: React.FC<GlobeProps> = ({
         setRegion("Failed to parse backend response: " + text);
         return;
       }
-      setRegion(data.region || "Unknown region");
+      
+      // The new API returns more detailed information
+      if (data.region) {
+        setRegion(data.region);
+      } else {
+        setRegion("Unknown region");
+      }
+      
+      // Optional: Log additional information for debugging
+      if (data.area_km2) {
+        console.log(`Viewport area: ${data.area_km2.toFixed(2)} km²`);
+      }
+      if (data.center) {
+        console.log(`Region center: ${data.center.lat.toFixed(3)}, ${data.center.lon.toFixed(3)}`);
+      }
     } catch (err) {
       setRegion("Failed to get region: " + err);
+    } finally {
+      setLoadingRegion(false);
     }
   };
 
+  const fetchHistoricalPrompt = async () => {
+    if (!viewportBounds) {
+      setHistoricalPrompt("Viewport coordinates are not available.");
+      return;
+    }
+    
+    setLoadingPrompt(true);
+    
+    // Build URL with all 4 corner coordinates (same as fetchRegion)
+    const params = new URLSearchParams({
+      top_left_lat: viewportBounds.topLeft.lat.toString(),
+      top_left_lon: viewportBounds.topLeft.lon.toString(),
+      top_right_lat: viewportBounds.topRight.lat.toString(),
+      top_right_lon: viewportBounds.topRight.lon.toString(),
+      bottom_left_lat: viewportBounds.bottomLeft.lat.toString(),
+      bottom_left_lon: viewportBounds.bottomLeft.lon.toString(),
+      bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
+      bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
+    });
+                      
+    try {
+      const response = await fetch(`/api/historical_prompt/?${params}`);
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setHistoricalPrompt("Failed to parse backend response: " + text);
+        return;
+      }
+      
+      if (data.prompt) {
+        setHistoricalPrompt(data.prompt);
+        console.log("Historical prompt generated:", data.prompt_length, "characters");
+        console.log("Location context:", data.location_context);
+      } else {
+        setHistoricalPrompt("No historical prompt generated");
+      }
+    } catch (err) {
+      setHistoricalPrompt("Failed to generate historical prompt: " + err);
+    } finally {
+      setLoadingPrompt(false);
+    }
+  };
+
+  const askGeminiAboutRegion = async () => {
+    if (!viewportBounds) {
+      setGeminiResponse("Viewport coordinates are not available.");
+      return;
+    }
+    
+    setLoadingGemini(true);
+    
+    // Build URL with all 4 corner coordinates (same as other functions)
+    const params = new URLSearchParams({
+      top_left_lat: viewportBounds.topLeft.lat.toString(),
+      top_left_lon: viewportBounds.topLeft.lon.toString(),
+      top_right_lat: viewportBounds.topRight.lat.toString(),
+      top_right_lon: viewportBounds.topRight.lon.toString(),
+      bottom_left_lat: viewportBounds.bottomLeft.lat.toString(),
+      bottom_left_lon: viewportBounds.bottomLeft.lon.toString(),
+      bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
+      bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
+    });
+                      
+    try {
+      const response = await fetch(`/api/ask_gemini/?${params}`);
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setGeminiResponse("Failed to parse backend response: " + text);
+        return;
+      }
+      
+      if (data.historical_info) {
+        setGeminiResponse(data.historical_info);
+        console.log("Gemini response received from:", data.model_used);
+        console.log("Location context:", data.location_context);
+      } else if (data.error) {
+        setGeminiResponse("Error: " + data.error);
+      } else {
+        setGeminiResponse("No response received from Gemini");
+      }
+    } catch (err) {
+      setGeminiResponse("Failed to get response from Gemini: " + err);
+    } finally {
+      setLoadingGemini(false);
+    }
+  };
 
   // Month navigation functions
   const goBackOneMonth = () => {
@@ -514,27 +648,92 @@ const Globe: React.FC<GlobeProps> = ({
           Tip: tweak <code className="bg-gray-800 px-1 rounded text-xs">BASE_ALPHA</code> and <code className="bg-gray-800 px-1 rounded text-xs">GIBS_ALPHA</code> to change blending.
         </div>
 
-        {viewportCoords && (
+        {viewportBounds && (
           <div className="text-xs text-white mt-2 bg-black/60 px-2 py-1 rounded">
-            Viewport Center: {viewportCoords.lat.toFixed(3)}°, {viewportCoords.lon.toFixed(3)}°
+            Viewport Center: {getViewportCenter(viewportBounds).lat.toFixed(3)}°, {getViewportCenter(viewportBounds).lon.toFixed(3)}°
           </div>
         )}
       </div>
 
       {/* Region/AI Panel under the other controls */}
       <div className="w-80 max-w-xs mt-2 flex flex-col gap-2 p-3 bg-black/70 text-white rounded-lg shadow-lg break-words">
-        <button
-          onClick={fetchRegion}
-          disabled={loadingRegion}
-          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-        >
-          {loadingRegion ? "Fetching region..." : "Get Region Info"}
-        </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <button
+              onClick={fetchRegion}
+              disabled={loadingRegion}
+              className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors text-sm"
+            >
+              {loadingRegion ? "Fetching..." : "Get Region"}
+            </button>
+            
+            <button
+              onClick={fetchHistoricalPrompt}
+              disabled={loadingPrompt}
+              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-sm"
+            >
+              {loadingPrompt ? "Generating..." : "History Prompt"}
+            </button>
+          </div>
+          
+          <button
+            onClick={askGeminiAboutRegion}
+            disabled={loadingGemini}
+            className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors text-sm"
+          >
+            {loadingGemini ? "Asking Gemini..." : "🤖 Ask Gemini About This Region"}
+          </button>
+        </div>
 
         {region && (
           <div>
             <span className="font-semibold">Current region:</span>
-            <p className="mt-1">{region}</p>
+            <p className="mt-1 text-sm">{region}</p>
+          </div>
+        )}
+
+        {historicalPrompt && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-semibold text-sm">LLM Prompt for History & Landmarks:</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(historicalPrompt)}
+                className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors"
+                title="Copy to clipboard"
+              >
+                Copy
+              </button>
+            </div>
+            <textarea
+              value={historicalPrompt}
+              readOnly
+              className="w-full h-32 p-2 bg-gray-800 text-white text-xs rounded border border-gray-600 resize-none"
+              placeholder="Historical prompt will appear here..."
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Copy this prompt and paste it into ChatGPT, Claude, or any other LLM to learn about this region's history!
+            </p>
+          </div>
+        )}
+
+        {geminiResponse && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-semibold text-sm">🤖 Gemini AI Response:</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(geminiResponse)}
+                className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors"
+                title="Copy to clipboard"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="w-full max-h-64 p-2 bg-gray-800 text-white text-xs rounded border border-gray-600 overflow-y-auto">
+              <pre className="whitespace-pre-wrap font-sans">{geminiResponse}</pre>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Historical information about this region generated by Gemini AI
+            </p>
           </div>
         )}
       </div>
