@@ -303,37 +303,18 @@ def _generate_prompt_data(request):
 
             prompt += f"""
 
-**Please provide information about:**
+Give me exactly 2-3 bullet points for each category:
 
-1. **Historical Events** (3-5 most significant):
-   - Major historical events that occurred in or near this area
-   - Include approximate dates and brief descriptions
-   - Focus on events of regional, national, or international significance
+**Historical Events:**
+(Most significant events with dates)
 
-2. **Notable Landmarks & Sites** (3-5 most interesting):
-   - Famous buildings, monuments, or natural features
-   - Archaeological sites or UNESCO World Heritage locations
-   - Culturally or historically significant places
+**Landmarks:**
+(Famous places or monuments) 
 
-3. **Cultural & Social Significance**:
-   - Important cultural movements or figures associated with this area
-   - Traditional or indigenous history if applicable
-   - Economic or strategic importance throughout history
+**Notable Facts:**
+(Interesting tidbits about this area)
 
-4. **Interesting Facts**:
-   - Unique geographical features
-   - Notable "firsts" or records associated with this location
-   - Lesser-known but fascinating historical tidbits
-
-**Instructions:**
-- Be specific about locations within the viewing area when possible
-- Include dates for historical events
-- Keep descriptions concise but informative (2-3 sentences each)
-- Prioritize accuracy and cite well-known historical facts
-- If this is a rural or less historically documented area, focus on regional context and natural features
-- Format your response clearly with headers and bullet points for easy reading
-
-Thank you for helping me learn about this fascinating region of our world!"""
+Keep each bullet point to 1 short sentence. Be very concise."""
 
             location_context = {
                 "center": {"lat": center_lat, "lon": center_lon},
@@ -362,16 +343,20 @@ Thank you for helping me learn about this fascinating region of our world!"""
             location_name = location_data.get("display_name", f"{lat}, {lon}")
             
             # Simple prompt for single point
-            prompt = f"""You are a knowledgeable historian and geographer. I am viewing a specific location on Earth at coordinates {lat}, {lon} ({location_name}).
+            prompt = f"""Location: {location_name}
 
-Please provide me with:
+Give me exactly 2-3 bullet points for each:
 
-1. **Historical Events** (3-5 most significant events in this area)
-2. **Notable Landmarks & Sites** (famous places, monuments, or natural features)
-3. **Cultural & Social Significance** (important cultural aspects or figures)
-4. **Interesting Facts** (unique features or lesser-known historical tidbits)
+**Historical Events:**
+(Most significant events with dates)
 
-Please be specific about this location and include dates where relevant. Keep descriptions concise but informative."""
+**Landmarks:**
+(Famous places or monuments)
+
+**Notable Facts:**
+(Interesting tidbits about this area)
+
+Keep each bullet point to 1 short sentence. Be very concise."""
 
             location_context = {
                 "center": {"lat": float(lat), "lon": float(lon)},
@@ -414,61 +399,34 @@ def ask_gemini_about_region(request):
     try:
         genai.configure(api_key=api_key)
         
-        # Try multiple model names in order of preference
-        model_names = [
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-latest',
-            'gemini-2.5-pro-latest', 
-            'gemini-1.5-pro',
-            'gemini-pro',
-            'models/gemini-pro'
-        ]
+        # Use only Gemini 1.5 Flash for concise responses
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
-        model = None
-        model_used = None
-        last_error = None
+        # Create a concise version of the prompt
+        concise_prompt = f"""Location: {location_context['location_name']}
+Area: ~{location_context.get('area_km2', 0):.1f} km²
+
+Give me exactly 2-3 bullet points for each:
+
+**Historical Events:**
+(Most significant events with dates)
+
+**Landmarks:**
+(Famous places or monuments)
+
+**Notable Facts:**
+(Interesting tidbits about this area)
+
+Keep each bullet point to 1 short sentence. Be very concise."""
         
-        for model_name in model_names:
-            try:
-                model = genai.GenerativeModel(model_name)
-                # Test the model with a simple prompt to verify it works
-                test_response = model.generate_content("Hello")
-                if test_response and test_response.text:
-                    model_used = model_name
-                    break
-            except Exception as e:
-                last_error = str(e)
-                continue
-        
-        if not model or not model_used:
-            # Try to list available models for debugging
-            try:
-                available_models = []
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-                
-                return Response({
-                    "error": f"No working Gemini model found. Last error: {last_error}",
-                    "available_models": available_models[:5],  # Show first 5 models
-                    "original_prompt": prompt_text,
-                    "location_context": location_context
-                }, status=500)
-            except Exception as list_error:
-                return Response({
-                    "error": f"Failed to find working Gemini model. Last error: {last_error}. List error: {str(list_error)}",
-                    "original_prompt": prompt_text,
-                    "location_context": location_context
-                }, status=500)
-        
-        # Generate response with the working model
-        response = model.generate_content(prompt_text)
+        # Generate response with concise prompt
+        response = model.generate_content(concise_prompt)
         
         return Response({
             "historical_info": response.text,
             "location_context": location_context,
-            "original_prompt": prompt_text,
-            "model_used": model_used
+            "original_prompt": concise_prompt,
+            "model_used": "gemini-2.5-flash"
         })
         
     except Exception as e:

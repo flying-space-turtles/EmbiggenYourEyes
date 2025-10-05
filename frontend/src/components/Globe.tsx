@@ -313,103 +313,6 @@ const Globe: React.FC<GlobeProps> = ({
     };
   };
 
-  const fetchRegion = async () => {
-    if (!viewportBounds) {
-      setRegion("Viewport coordinates are not available.");
-      return;
-    }
-    
-    setLoadingRegion(true);
-    
-    // Build URL with all 4 corner coordinates
-    const params = new URLSearchParams({
-      top_left_lat: viewportBounds.topLeft.lat.toString(),
-      top_left_lon: viewportBounds.topLeft.lon.toString(),
-      top_right_lat: viewportBounds.topRight.lat.toString(),
-      top_right_lon: viewportBounds.topRight.lon.toString(),
-      bottom_left_lat: viewportBounds.bottomLeft.lat.toString(),
-      bottom_left_lon: viewportBounds.bottomLeft.lon.toString(),
-      bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
-      bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
-    });
-                      
-    try {
-      const response = await fetch(`/api/get_region/?${params}`);
-      const text = await response.text(); // first get raw text
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        setRegion("Failed to parse backend response: " + text);
-        return;
-      }
-      
-      // The new API returns more detailed information
-      if (data.region) {
-        setRegion(data.region);
-      } else {
-        setRegion("Unknown region");
-      }
-      
-      // Optional: Log additional information for debugging
-      if (data.area_km2) {
-        console.log(`Viewport area: ${data.area_km2.toFixed(2)} km²`);
-      }
-      if (data.center) {
-        console.log(`Region center: ${data.center.lat.toFixed(3)}, ${data.center.lon.toFixed(3)}`);
-      }
-    } catch (err) {
-      setRegion("Failed to get region: " + err);
-    } finally {
-      setLoadingRegion(false);
-    }
-  };
-
-  const fetchHistoricalPrompt = async () => {
-    if (!viewportBounds) {
-      setHistoricalPrompt("Viewport coordinates are not available.");
-      return;
-    }
-    
-    setLoadingPrompt(true);
-    
-    // Build URL with all 4 corner coordinates (same as fetchRegion)
-    const params = new URLSearchParams({
-      top_left_lat: viewportBounds.topLeft.lat.toString(),
-      top_left_lon: viewportBounds.topLeft.lon.toString(),
-      top_right_lat: viewportBounds.topRight.lat.toString(),
-      top_right_lon: viewportBounds.topRight.lon.toString(),
-      bottom_left_lat: viewportBounds.bottomLeft.lat.toString(),
-      bottom_left_lon: viewportBounds.bottomLeft.lon.toString(),
-      bottom_right_lat: viewportBounds.bottomRight.lat.toString(),
-      bottom_right_lon: viewportBounds.bottomRight.lon.toString(),
-    });
-                      
-    try {
-      const response = await fetch(`/api/historical_prompt/?${params}`);
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        setHistoricalPrompt("Failed to parse backend response: " + text);
-        return;
-      }
-      
-      if (data.prompt) {
-        setHistoricalPrompt(data.prompt);
-        console.log("Historical prompt generated:", data.prompt_length, "characters");
-        console.log("Location context:", data.location_context);
-      } else {
-        setHistoricalPrompt("No historical prompt generated");
-      }
-    } catch (err) {
-      setHistoricalPrompt("Failed to generate historical prompt: " + err);
-    } finally {
-      setLoadingPrompt(false);
-    }
-  };
-
   const askGeminiAboutRegion = async () => {
     if (!viewportBounds) {
       setGeminiResponse("Viewport coordinates are not available.");
@@ -657,25 +560,7 @@ const Globe: React.FC<GlobeProps> = ({
 
       {/* Region/AI Panel under the other controls */}
       <div className="w-80 max-w-xs mt-2 flex flex-col gap-2 p-3 bg-black/70 text-white rounded-lg shadow-lg break-words">
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <button
-              onClick={fetchRegion}
-              disabled={loadingRegion}
-              className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors text-sm"
-            >
-              {loadingRegion ? "Fetching..." : "Get Region"}
-            </button>
-            
-            <button
-              onClick={fetchHistoricalPrompt}
-              disabled={loadingPrompt}
-              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-sm"
-            >
-              {loadingPrompt ? "Generating..." : "History Prompt"}
-            </button>
-          </div>
-          
+        <div className="flex flex-col gap-2">          
           <button
             onClick={askGeminiAboutRegion}
             disabled={loadingGemini}
@@ -718,18 +603,109 @@ const Globe: React.FC<GlobeProps> = ({
 
         {geminiResponse && (
           <div className="mt-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-semibold text-sm">🤖 Gemini AI Response:</span>
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-semibold text-sm text-purple-300 flex items-center">
+                <span className="mr-2">🤖</span>
+                Gemini AI Response
+              </span>
               <button
                 onClick={() => navigator.clipboard.writeText(geminiResponse)}
-                className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors"
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs transition-all hover:scale-105 shadow-sm"
                 title="Copy to clipboard"
               >
-                Copy
+                📋 Copy
               </button>
             </div>
-            <div className="w-full max-h-64 p-2 bg-gray-800 text-white text-xs rounded border border-gray-600 overflow-y-auto">
-              <pre className="whitespace-pre-wrap font-sans">{geminiResponse}</pre>
+            <div className="w-full max-h-64 p-4 bg-gradient-to-br from-gray-800 via-gray-850 to-gray-900 text-white text-xs rounded-lg border border-gray-600 shadow-lg overflow-y-auto animate-fadeIn">
+              {(() => {
+                // Clean up the response and parse it properly
+                const cleanResponse = geminiResponse
+                  .replace(/🏛️🏛️/g, '🏛️') // Fix duplicate emojis
+                  .replace(/💡💡/g, '💡')
+                  .replace(/📜📜/g, '📜');
+
+                // Split by lines and process each section
+                const lines = cleanResponse.split('\n').filter(line => line.trim());
+                const result = [];
+                let currentSection = null;
+                let currentBullets = [];
+
+                for (const line of lines) {
+                  const trimmedLine = line.trim();
+                  
+                  // Check if this is a section header
+                  if (trimmedLine.includes(':') && (
+                    trimmedLine.includes('Historical Events') ||
+                    trimmedLine.includes('Landmarks') ||
+                    trimmedLine.includes('Notable Facts') ||
+                    trimmedLine.includes('Events') ||
+                    trimmedLine.includes('Facts')
+                  )) {
+                    // Save previous section if exists
+                    if (currentSection && currentBullets.length > 0) {
+                      result.push({
+                        title: currentSection,
+                        bullets: [...currentBullets]
+                      });
+                    }
+                    
+                    // Start new section
+                    currentSection = trimmedLine
+                      .replace(/🏛️/g, '') // Remove building emoji
+                      .replace(/📜/g, '') // Remove scroll emoji
+                      .replace(/💡/g, '') // Remove lightbulb emoji
+                      .replace(/:/g, '') // Remove colons
+                      .trim();
+                    currentBullets = [];
+                  }
+                  // Check if this is a bullet point
+                  else if (trimmedLine.startsWith('•') || trimmedLine.includes('* ')) {
+                    const bulletText = trimmedLine
+                      .replace(/^[•*]\s*/, '') // Remove bullet markers
+                      .replace(/^\*\s*/, '') // Remove asterisk bullets
+                      .trim();
+                    
+                    // Handle cases where bullets are split by asterisks
+                    const parts = bulletText.split(' * ').filter(part => part.trim());
+                    currentBullets.push(...parts);
+                  }
+                }
+                
+                // Add the last section
+                if (currentSection && currentBullets.length > 0) {
+                  result.push({
+                    title: currentSection,
+                    bullets: [...currentBullets]
+                  });
+                }
+
+                // Render the parsed sections
+                if (result.length > 0) {
+                  return result.map((section, sectionIdx) => (
+                    <div key={sectionIdx} className="mb-4 last:mb-0 p-3 rounded-md bg-black/20 border-l-3 border-blue-400/40">
+                      <h4 className="font-semibold text-blue-300 mb-2 flex items-center text-sm">
+                        {(section.title.includes('Historical') || section.title.includes('Events')) && '📜'}
+                        {section.title.includes('Landmarks') && '🏛️'}
+                        {(section.title.includes('Notable') || section.title.includes('Facts')) && '💡'}
+                        <span className="ml-2">{section.title}</span>
+                      </h4>
+                      <ul className="space-y-2 ml-3">
+                        {section.bullets.map((bullet, idx) => (
+                          <li key={idx} className="flex items-start group">
+                            <span className="text-yellow-400 mr-3 mt-0.5 group-hover:text-yellow-300 transition-colors">•</span>
+                            <span className="text-gray-200 leading-relaxed group-hover:text-white transition-colors text-sm">{bullet}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ));
+                }
+                
+                // If parsing fails, fall back to original text
+                return (
+                  <pre className="whitespace-pre-wrap font-sans text-gray-200 text-sm leading-relaxed">{geminiResponse}</pre>
+                );
+              })()}
             </div>
             <p className="text-xs text-gray-400 mt-1">
               Historical information about this region generated by Gemini AI
