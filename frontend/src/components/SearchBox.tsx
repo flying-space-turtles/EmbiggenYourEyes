@@ -27,7 +27,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
     const newTimer = setTimeout(async () => {
       try {
         setError("");
-        const response = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(query)}`);
+        const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
         const data = await response.json();
 
         if (response.ok && data.results) {
@@ -56,7 +56,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onResult }) => {
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim()) {
       try {
-        const response = await fetch(`http://localhost:8000/api/search/?q=${encodeURIComponent(query)}`);
+        const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
         const data = await response.json();
 
         if (response.ok && data.results && data.results.length > 0) {
